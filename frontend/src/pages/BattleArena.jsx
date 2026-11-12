@@ -47,7 +47,7 @@ function BattleArena() {
   const [runResult, setRunResult] = useState(null);
   const [submitResult, setSubmitResult] = useState(null);
   const [execError, setExecError] = useState("");
-  const recovery=useSubmissionRecovery({problem:problem?._id,context:'battle',battleId},result=>{
+  const recovery=useSubmissionRecovery({problem:problem?._id,context:'battle',battleId,enabled:draft.canEdit},result=>{
     setSubmitResult(result);setConsoleMode('submit');setSubmitting(['pending','running'].includes(result.status)&&result.enqueueState!=='enqueue_failed');
   });
 
@@ -225,6 +225,7 @@ function BattleArena() {
 
   // Run Code (Sample tests validation)
   const handleRunCode = async () => {
+    if(!draft.canEdit)return;
     if (running || submitting || !problem) return;
     setRunning(true);
     setExecError("");
@@ -262,6 +263,7 @@ function BattleArena() {
 
   // Submit Battle Code (Official Battle Submission)
   const handleSubmitCode = async () => {
+    if(!draft.canEdit)return;
     if (submitting || !code.trim()) return;
     setSubmitting(true);
     setExecError("");
@@ -277,6 +279,7 @@ function BattleArena() {
 
   // Surrender Handler
   const handleSurrender = () => {
+    if(!draft.canEdit)return;
     const socket = getSocket();
     if (socket) {
       socket.emit("surrender_battle", { battleId });
@@ -447,14 +450,14 @@ function BattleArena() {
               <button 
                 className="btn-run-code" 
                 onClick={handleRunCode}
-                disabled={running || submitting || !!gameOverData}
+                disabled={running || submitting || !!gameOverData || !draft.canEdit}
               >
                 {running ? "Running..." : "Run Tests"}
               </button>
               <button 
                 className="btn-submit-battle" 
                 onClick={handleSubmitCode}
-                disabled={submitting || running || !!gameOverData}
+                disabled={submitting || running || !!gameOverData || !draft.canEdit}
               >
                 {submitting ? "Judging..." : "Submit Code"}
               </button>
@@ -462,18 +465,20 @@ function BattleArena() {
           </div>
 
           {/* Editor Workspace */}
+          <DraftStatus draft={draft} />
+          <div className="submission-recovery" role="status">{recovery.error && <span className="submission-recovery__error">{recovery.error}</span>}<button className="draft-action" type="button" disabled={!draft.canEdit} onClick={recovery.recover}>Recover submission status</button></div>
           <div className="code-editor-area">
             <div className="editor-line-numbers">
               {code.split("\n").map((_, i) => (
                 <div key={i}>{i + 1}</div>
               ))}
             </div>
-            <DraftStatus draft={draft} />
-            <div role="status" style={{fontSize:12}}>{recovery.error}<button type="button" onClick={recovery.recover}>Recover submission status</button></div>
             <textarea
               ref={textareaRef}
               className="code-textarea"
               value={code}
+              readOnly={!draft.canEdit || draft.resolving}
+              wrap="off"
               onChange={handleCodeChange}
               onKeyDown={handleKeyDown}
               spellCheck="false"
@@ -760,7 +765,7 @@ function BattleArena() {
               <button className="btn-lobby-return" onClick={() => setShowSurrenderModal(false)}>
                 Keep Fighting
               </button>
-              <button className="btn-play-again" style={{ background: "var(--red)", color: "#fff" }} onClick={handleSurrender}>
+              <button className="btn-play-again" disabled={!draft.canEdit} style={{ background: "var(--red)", color: "#fff" }} onClick={handleSurrender}>
                 Yes, Surrender
               </button>
             </div>

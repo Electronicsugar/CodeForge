@@ -41,7 +41,7 @@ function ProblemDetail() {
   const [executionMode, setExecutionMode] = useState(null); // 'run' | 'submit' | null
   const [activeCaseIndex, setActiveCaseIndex] = useState(0);
   const [execError, setExecError] = useState("");
-  const recovery=useSubmissionRecovery({problem:id,context:contestId?`contest:${contestId}`:'practice'},result=>{
+  const recovery=useSubmissionRecovery({problem:id,context:contestId?`contest:${contestId}`:'practice',enabled:draft.canEdit},result=>{
     setSubmitResult(result);setExecutionMode('submit');setSubmitting(['pending','running'].includes(result.status)&&result.enqueueState!=='enqueue_failed');
   });
 
@@ -242,6 +242,7 @@ function ProblemDetail() {
 
   /* Run Code (Sample Test Cases only, no submission saved in DB) */
   const handleRun = async () => {
+    if(!draft.canEdit)return;
     if (running || submitting) return;
     setRunning(true);
     setExecError("");
@@ -299,6 +300,7 @@ function ProblemDetail() {
 
   /* Submit (All Test Cases, judged & recorded in DB) */
   const handleSubmit = async () => {
+  if(!draft.canEdit)return;
   if (running || submitting) return;
 
   setSubmitting(true);
@@ -521,7 +523,7 @@ function ProblemDetail() {
               id="run-code-btn"
               className={`dp-run-btn ${running ? "loading" : ""}`}
               onClick={handleRun}
-              disabled={running || submitting}
+              disabled={running || submitting || !draft.canEdit}
               title="Run code on sample test cases"
             >
               {running ? (
@@ -541,7 +543,7 @@ function ProblemDetail() {
               id="submit-code-btn"
               className={`dp-submit-btn ${submitting ? "loading" : ""}`}
               onClick={handleSubmit}
-              disabled={running || submitting}
+              disabled={running || submitting || !draft.canEdit}
               title="Submit code for full evaluation"
             >
               {submitting ? (
@@ -721,7 +723,7 @@ function ProblemDetail() {
               <button
                 className="dp-reset-btn"
                 onClick={handleResetCode}
-                disabled={running || submitting}
+                disabled={running || submitting || !draft.canEdit}
                 title="Reset code to starter template"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -735,18 +737,20 @@ function ProblemDetail() {
           </div>
 
           {/* CODE EDITOR */}
+          <DraftStatus draft={draft} />
+          <div className="submission-recovery" role="status">{recovery.error && <span className="submission-recovery__error">{recovery.error}</span>}<button className="draft-action" type="button" disabled={!draft.canEdit} onClick={recovery.recover}>Recover submission status</button></div>
           <div className="dp-editor-wrap">
             <div className="dp-gutter" ref={gutterRef}>
               {Array.from({ length: lineCount }).map((_, i) => (
                 <div key={i} className="dp-line-num">{i + 1}</div>
               ))}
             </div>
-            <DraftStatus draft={draft} />
-            <div role="status" style={{fontSize:12}}>{recovery.error}<button type="button" onClick={recovery.recover}>Recover submission status</button></div>
             <textarea
               ref={textareaRef}
               className="dp-code-area"
               value={code}
+              readOnly={!draft.canEdit || draft.resolving}
+              wrap="off"
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={handleTabKey}
               onScroll={handleEditorScroll}

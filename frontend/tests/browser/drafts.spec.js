@@ -1,4 +1,5 @@
 import {test,expect,chromium} from '@playwright/test';
+import {readFile} from 'node:fs/promises';
 test('late initialization preserves edits and language contexts stay isolated',async({page})=>{
   await page.goto('/login');
   await page.evaluate(async()=>{const root=document.createElement('div');root.id='harness-root';document.body.append(root);const {mount}=await import('/tests/browser/harness.jsx');mount();});
@@ -175,4 +176,86 @@ test('quota failure keeps text editable and fallback tab notifications detect ch
   });
   await page.locator('textarea').fill('quota unsaved source');await expect(page.getByText(/Save failed/)).toBeVisible();
   await expect(page.locator('textarea')).toHaveValue('quota unsaved source');
+});
+test('practice conflict actions stay compact, keep exact text without downloading and export only on backup',async({context,page},info)=>{
+  await mock(context);await page.goto('/problems/p');await expect(page.locator('textarea')).toHaveValue('// starter');
+  const second=await context.newPage();await second.goto('/problems/p');await expect(second.locator('textarea')).toHaveValue('// starter');
+  const exact='// local version\nint main() { return 17; }\n';
+  await page.locator('textarea').fill(exact);await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await expect(second.getByText('Draft conflict',{exact:true})).toBeVisible();
+  const local='// retain exact whitespace\n  return 23;\n';await second.locator('textarea').fill(local);
+  const downloads=[];second.on('download',download=>downloads.push(download));
+  const box=await second.getByRole('button',{name:'Keep my version',exact:true}).boundingBox();
+  expect(box.height).toBeLessThan(40);expect(box.width).toBeLessThan(170);
+  const layout=await second.locator('textarea').evaluate(node=>{
+    const rect=node.getBoundingClientRect(),parent=node.parentElement.getBoundingClientRect();
+    return {editorWidth:rect.width,parentWidth:parent.width,wrap:node.wrap};
+  });
+  expect(layout.editorWidth).toBeGreaterThan(layout.parentWidth-65);expect(layout.wrap).toBe('off');
+  const bg=await second.getByRole('button',{name:'Keep my version',exact:true}).evaluate(node=>getComputedStyle(node).backgroundColor);
+  expect(bg).not.toBe('rgb(255, 255, 255)');
+  await second.screenshot({path:info.outputPath('practice-conflict.png')});
+  await second.setViewportSize({width:600,height:900});
+  const mobile=await second.getByRole('button',{name:'Keep my version',exact:true}).boundingBox();
+  expect(mobile.height).toBeLessThan(40);expect(mobile.x+mobile.width).toBeLessThanOrEqual(600);
+  await second.screenshot({path:info.outputPath('practice-conflict-small.png'),fullPage:true});
+  await second.setViewportSize({width:1280,height:720});
+  await second.getByRole('button',{name:'Keep my version',exact:true}).click();
+  await expect(second.getByText('Saved locally',{exact:true})).toBeVisible();
+  await expect(second.locator('textarea')).toHaveValue(local);expect(downloads).toHaveLength(0);
+  await expect(page.getByText('Draft conflict',{exact:true})).toBeVisible();
+  const backup=page.waitForEvent('download');await page.getByRole('button',{name:'Download backup',exact:true}).click();
+  const file=await backup;expect(file.suggestedFilename()).toBe('codeforge-draft.cpp');expect(await readFile(await file.path(),'utf8')).toBe(exact);
+  await expect(page.locator('textarea')).toHaveValue(exact);await expect(page.getByText('Draft conflict',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Load saved version',exact:true}).click();await expect(page.locator('textarea')).toHaveValue(local);
+  await second.reload();await expect(second.locator('textarea')).toHaveValue(local);
+});
+test('an intervening write during Keep my version remains an unresolved conflict',async({context,page})=>{
+  await mock(context);await page.goto('/problems/p');await expect(page.locator('textarea')).toHaveValue('// starter');
+  const second=await context.newPage();await second.goto('/problems/p');await expect(second.locator('textarea')).toHaveValue('// starter');
+  await page.locator('textarea').fill('first committed');await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await expect(second.getByText('Draft conflict',{exact:true})).toBeVisible();await second.locator('textarea').fill('my exact version');
+  await second.evaluate(()=>{
+    const transaction=IDBDatabase.prototype.transaction;let once=true;
+    IDBDatabase.prototype.transaction=function(stores,mode,...args){
+      if(once&&stores==='drafts'&&mode==='readwrite'){
+        once=false;const rival=transaction.call(this,stores,mode,...args);const store=rival.objectStore('drafts');
+        store.openCursor().onsuccess=event=>{const cursor=event.target.result;if(cursor){const record=cursor.value;cursor.update({...record,revision:record.revision+1,code:'rival committed',writerId:'rival'});}};
+      }
+      return transaction.call(this,stores,mode,...args);
+    };
+  });
+  await second.getByRole('button',{name:'Keep my version',exact:true}).click();
+  await expect(second.getByText('Draft conflict',{exact:true})).toBeVisible();await expect(second.locator('textarea')).toHaveValue('my exact version');
+  await second.getByRole('button',{name:'Load saved version',exact:true}).click();await expect(second.locator('textarea')).toHaveValue('rival committed');
+});
+for(const mode of ['battle','contest'])test(`${mode} owns one editor tab while preserving saves, refresh and visibility flush`,async({context,page})=>{
+  await mock(context);
+  let url='/problems/p?contestId=c1';
+  if(mode==='battle'){
+    url='/battle/b1';
+    await context.route('**/api/v1/battles/b1',route=>route.fulfill({json:{data:{_id:'b1',status:'in_progress',problem:problem('p'),player1:{user:{_id:'user-a',name:'A'},initialRating:1200},player2:{user:{_id:'user-b',name:'B'},initialRating:1200}}}}));
+  }else await context.route('**/api/v1/contests/c1',route=>route.fulfill({json:{data:{data:{_id:'c1',problems:[problem('p')],startTime:new Date().toISOString(),endTime:new Date(Date.now()+3600000).toISOString()}}}}));
+  await page.goto(url);await expect(page.locator('textarea')).toHaveValue('// starter');await expect(page.locator('textarea')).not.toHaveAttribute('readonly');
+  await page.locator('textarea').fill(`${mode} saved`);await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  const second=await context.newPage();await second.goto(url);
+  await expect(second.getByText(/this editor is active in another tab/)).toBeVisible();await expect(second.locator('textarea')).toHaveAttribute('readonly');
+  await expect(second.getByRole('button',{name:'Keep my version'})).toHaveCount(0);
+  await expect(second.getByRole('button',{name:'Load saved version'})).toHaveCount(0);
+  await expect(second.getByRole('button',{name:mode==='battle'?'Submit Code':'Submit',exact:true})).toBeDisabled();
+  await page.locator('textarea').fill(`${mode} flushed on hide`);
+  await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+  await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await page.reload();await expect(page.locator('textarea')).toHaveValue(`${mode} flushed on hide`);
+  await page.close();await second.getByRole('button',{name:'Retry editor access'}).click();
+  await expect(second.locator('textarea')).not.toHaveAttribute('readonly');await expect(second.locator('textarea')).toHaveValue(`${mode} flushed on hide`);
+  await second.locator('textarea').fill(`${mode} new owner`);await expect(second.getByText('Saved locally',{exact:true})).toBeVisible();
+});
+for(const [language,extension] of [['python','py'],['javascript','js']])test(`backup preserves ${language} source and extension`,async({page})=>{
+  await page.goto('/login');
+  const source='// exact backup\n  whitespace\n';
+  await page.evaluate(async({language,source})=>{const root=document.createElement('div');root.id='harness-root';document.body.append(root);const {mountBackup}=await import('/tests/browser/harness.jsx');mountBackup(language,source);},{language,source});
+  const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download backup',exact:true}).click();
+  const file=await pending;expect(file.suggestedFilename()).toBe(`codeforge-draft.${extension}`);expect(await readFile(await file.path(),'utf8')).toBe(source);
+  await expect(page.getByText('Draft conflict',{exact:true})).toBeVisible();
 });

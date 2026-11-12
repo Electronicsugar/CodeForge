@@ -276,6 +276,7 @@
 
 /* Right Pane (Code Editor & Console) */
 .arena-right-pane {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: #111;
@@ -326,6 +327,8 @@
 
 /* Code Editor Workspace */
 .code-editor-area {
+  min-width: 0;
+  min-height: 120px;
   flex: 1;
   display: flex;
   background: #141414;
@@ -348,6 +351,7 @@
 }
 
 .code-textarea {
+  min-width: 0;
   flex: 1;
   background: transparent;
   color: #e5e7eb;
