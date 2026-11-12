@@ -5,6 +5,8 @@ import { getProblemById, getProblems } from "../services/problemService";
 import { getContestById } from "../services/contestService";
 import { createSubmission, runCode, getMySubmissions, getSubmissionById } from "../services/submissionService";
 import { useAuth } from "../context/AuthContext";
+import { useCodeDraft } from '../hooks/useCodeDraft';
+import DraftStatus from '../components/DraftStatus';
 
 const STATUS_LABELS = {
   accepted: "Accepted",
@@ -27,7 +29,10 @@ function ProblemDetail() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const [code, setCode] = useState("");
+  const [searchParams] = useSearchParams();
+  const contestId = searchParams.get("contestId");
+  const draft = useCodeDraft({userId:user?._id || user?.id, problemId:id, language:'cpp', context:contestId ? `contest:${contestId}` : 'practice'}, problem?.starterCode || '', problem?._id === id);
+  const {code, setCode} = draft;
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [runResult, setRunResult] = useState(null);
@@ -40,8 +45,6 @@ function ProblemDetail() {
   const [problemSubs, setProblemSubs] = useState([]);
   const [subsLoading, setSubsLoading] = useState(false);
 
-  const [searchParams] = useSearchParams();
-  const contestId = searchParams.get("contestId");
   const [contest, setContest] = useState(null);
   const [contestProblems, setContestProblems] = useState([]);
   const [contestTimeLeft, setContestTimeLeft] = useState("");
@@ -69,7 +72,6 @@ function ProblemDetail() {
         if (cancelled) return;
 
         setProblem(res.data);
-        setCode(res.data.starterCode || "");
 
       } catch (err) {
 
@@ -731,6 +733,7 @@ function ProblemDetail() {
                 <div key={i} className="dp-line-num">{i + 1}</div>
               ))}
             </div>
+            <DraftStatus draft={draft} />
             <textarea
               ref={textareaRef}
               className="dp-code-area"

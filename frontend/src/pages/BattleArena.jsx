@@ -5,6 +5,8 @@ import { getSocket } from "../services/socket";
 import { getBattleById } from "../services/battleService";
 import { runCode } from "../services/submissionService";
 import "./BattleArena.css";
+import { useCodeDraft } from '../hooks/useCodeDraft';
+import DraftStatus from '../components/DraftStatus';
 
 const STATUS_LABELS = {
   accepted: "Accepted",
@@ -24,7 +26,8 @@ function BattleArena() {
 
   const [battle, setBattle] = useState(location.state?.initialMatch || null);
   const [problem, setProblem] = useState(location.state?.initialMatch?.problem || null);
-  const [code, setCode] = useState("");
+  const draft = useCodeDraft({userId:user?._id || user?.id, problemId:problem?._id, language:'cpp', context:'battle', battleId}, problem?.starterCode || '// Write your C++ solution here\n', !!problem && String(battle?._id || battle?.battleId) === battleId);
+  const {code, setCode} = draft;
   const [loading, setLoading] = useState(!battle);
 
   // Players info
@@ -67,9 +70,6 @@ function BattleArena() {
         setBattle(res.data.data);
         if (res.data.data.problem) {
           setProblem(res.data.data.problem);
-          if (!code && res.data.data.problem.starterCode) {
-            setCode(res.data.data.problem.starterCode);
-          }
         }
       } catch (err) {
         console.error("Failed to load battle:", err);
@@ -88,9 +88,6 @@ function BattleArena() {
       const myId = user._id || user.id;
       setIsPlayer1(p1Id?.toString() === myId?.toString());
 
-      if (battle.problem && !code) {
-        setCode(battle.problem.starterCode || "// Write your C++ solution here\n");
-      }
     }
   }, [battle, user]);
 
@@ -458,6 +455,7 @@ function BattleArena() {
                 <div key={i}>{i + 1}</div>
               ))}
             </div>
+            <DraftStatus draft={draft} />
             <textarea
               ref={textareaRef}
               className="code-textarea"
