@@ -52,7 +52,7 @@ export async function writeDraft(key, code, expectedRevision, writerId) {
       if (current && !validDraft(current)) { failure = new Error('Saved draft is invalid. Export your code before clearing storage.'); tx.abort(); return; }
       if ((current?.revision || 0) !== expectedRevision) { failure = new DraftConflict(current); tx.abort(); return; }
       next = { key, code, revision: expectedRevision + 1, schemaVersion: 1, updatedAt: Date.now(), writerId };
-      store.put(next);
+      try {store.put(next);} catch(error) {failure=error;tx.abort();}
     };
     tx.oncomplete = () => resolve(next);
     tx.onabort = tx.onerror = () => reject(failure || tx.error || new Error('Draft save failed.'));

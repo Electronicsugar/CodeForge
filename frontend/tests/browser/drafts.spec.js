@@ -162,3 +162,17 @@ test('repeated socket access while disconnected reuses one instance',async({cont
     return !!first&&getSocket()===first&&getSocket()===first;
   })).toBe(true);
 });
+test('quota failure keeps text editable and fallback tab notifications detect changes',async({context,page})=>{
+  await context.addInitScript(()=>{window.BroadcastChannel=undefined;});
+  await mock(context);await page.goto('/problems/p');await expect(page.locator('textarea')).toHaveValue('// starter');
+  const second=await context.newPage();await second.goto('/problems/p');await expect(second.locator('textarea')).toHaveValue('// starter');
+  await page.locator('textarea').fill('fallback saved');await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await expect(second.getByText('Draft conflict',{exact:true})).toBeVisible();
+  await second.close();
+  await page.evaluate(()=>{
+    const original=IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put=function(...args){if(this.name==='drafts')throw new DOMException('Simulated quota failure','QuotaExceededError');return original.apply(this,args);};
+  });
+  await page.locator('textarea').fill('quota unsaved source');await expect(page.getByText(/Save failed/)).toBeVisible();
+  await expect(page.locator('textarea')).toHaveValue('quota unsaved source');
+});

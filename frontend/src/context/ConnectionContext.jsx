@@ -35,11 +35,12 @@ export function ConnectionProvider({children}) {
     const socket=getSocket();if(!socket)return;
     const connected=()=>setSocketState('connected');
     const disconnected=()=>setSocketState('connecting');
+    const rejected=()=>{setSocketState('connecting');if(!socket.active)refreshUser();};
     setSocketState(socket.connected?'connected':'connecting');
-    socket.on('connect',connected);socket.on('disconnect',disconnected);socket.on('connect_error',disconnected);
+    socket.on('connect',connected);socket.on('disconnect',disconnected);socket.on('connect_error',rejected);
     const reconnect=()=>{if(!socket.connected)socket.connect();};window.addEventListener('online',reconnect);
-    return()=>{socket.off('connect',connected);socket.off('disconnect',disconnected);socket.off('connect_error',disconnected);window.removeEventListener('online',reconnect);};
-  },[token,verified]);
+    return()=>{socket.off('connect',connected);socket.off('disconnect',disconnected);socket.off('connect_error',rejected);window.removeEventListener('online',reconnect);};
+  },[token,verified,refreshUser]);
   const status=!browserOnline?'Offline':backend==='unavailable'?'Server unavailable':backend==='checking'||(token&&(!verified||socketState!=='connected'))?'Reconnecting':'Online';
   return <ConnectionContext.Provider value={{status,browserOnline,backend,socketState}}>{children}<div role="status" style={{position:'fixed',bottom:10,right:12,zIndex:1000,padding:'6px 10px',borderRadius:6,background:'#172033',color:'#fff',fontSize:12}}>{status}{token&&!verified?' · Local editing only':''}</div></ConnectionContext.Provider>;
 }

@@ -11,8 +11,9 @@ const createSubmission = async (req, res) => {
             message: submission.enqueueState === 'queued' ? 'Submission queued successfully' : 'Submission saved; queue recovery pending',
             data: {
                 submissionId: submission._id,
-                status: submission.status
-                ,enqueueState: submission.enqueueState, enqueueError:submission.enqueueError
+                status: submission.status,
+                enqueueState: submission.enqueueState,
+                enqueueError:submission.enqueueError
             }
         });
     } catch (error) {
