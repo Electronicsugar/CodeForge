@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { draftKey, readDraft, writeDraft, DraftConflict, openStorage, putIntent, getIntent } from '../src/services/draftStorage.js';
+import { draftKey, readDraft, writeDraft, DraftConflict, openStorage, putIntent, getIntent,prepareIntent,patchIntent } from '../src/services/draftStorage.js';
 test('draft identity isolates user, problem, language, context and battle', () => {
   const base = { userId: 'a', problemId: 'p' };
   const keys = [base, {...base,userId:'b'}, {...base,problemId:'q'}, {...base,language:'python'}, {...base,context:'contest'}, {...base,battleId:'b'}].map(draftKey);
@@ -29,4 +29,14 @@ test('corrupt records are rejected without replacement', async () => {
 test('submission intent survives subsequent reads', async () => {
   await putIntent({key:'intent',userId:'a',idempotencyKey:'uuid',payload:{code:'source'}});
   assert.equal((await getIntent('intent')).payload.code,'source');
+});
+test('concurrent intent preparation reuses one key; ambiguous intent cannot change payload',async()=>{
+  const [a,b]=await Promise.all([prepareIntent('active','a',{code:'same'}),prepareIntent('active','a',{code:'same'})]);
+  assert.equal(a.idempotencyKey,b.idempotencyKey);
+  await assert.rejects(prepareIntent('active','a',{code:'different'}),/unresolved/);
+  await putIntent({...a,completed:true});
+  const next=await prepareIntent('active','a',{code:'different'});
+  assert.notEqual(a.idempotencyKey,next.idempotencyKey);
+  assert.equal(await patchIntent(a,{submissionId:'stale-id'}),false);
+  assert.equal((await getIntent('active')).submissionId,undefined);
 });

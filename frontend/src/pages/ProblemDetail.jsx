@@ -7,6 +7,7 @@ import { createSubmission, runCode, getMySubmissions, getSubmissionById } from "
 import { useAuth } from "../context/AuthContext";
 import { useCodeDraft } from '../hooks/useCodeDraft';
 import DraftStatus from '../components/DraftStatus';
+import {useSubmissionRecovery} from '../hooks/useSubmissionRecovery';
 
 const STATUS_LABELS = {
   accepted: "Accepted",
@@ -40,6 +41,9 @@ function ProblemDetail() {
   const [executionMode, setExecutionMode] = useState(null); // 'run' | 'submit' | null
   const [activeCaseIndex, setActiveCaseIndex] = useState(0);
   const [execError, setExecError] = useState("");
+  const recovery=useSubmissionRecovery({problem:id,context:contestId?`contest:${contestId}`:'practice'},result=>{
+    setSubmitResult(result);setExecutionMode('submit');setSubmitting(['pending','running'].includes(result.status)&&result.enqueueState!=='enqueue_failed');
+  });
 
   const [leftTab, setLeftTab] = useState("description");
   const [problemSubs, setProblemSubs] = useState([]);
@@ -262,6 +266,7 @@ function ProblemDetail() {
       const res = await getSubmissionById(submissionId);
 
       const submission = res.data;
+      if (submission.enqueueState === 'enqueue_failed') return submission;
 
       console.log(
         `Submission ${submissionId} status:`,
@@ -303,7 +308,9 @@ function ProblemDetail() {
 
   try {
     // Step 1: Create submission + add job to BullMQ
+    await draft.flush();
     const res = await createSubmission({
+      userId:user?._id||user?.id,context:contestId?`contest:${contestId}`:'practice',
       problem: id,
       language: "cpp",
       code,
@@ -345,6 +352,7 @@ function ProblemDetail() {
 
     // Step 3: Show actual final result
     setSubmitResult(finalResult);
+    recovery.recover();
 
     // Refresh submissions if tab is open
     if (leftTab === "submissions") {
@@ -734,6 +742,7 @@ function ProblemDetail() {
               ))}
             </div>
             <DraftStatus draft={draft} />
+            <div role="status" style={{fontSize:12}}>{recovery.error}<button type="button" onClick={recovery.recover}>Recover submission status</button></div>
             <textarea
               ref={textareaRef}
               className="dp-code-area"

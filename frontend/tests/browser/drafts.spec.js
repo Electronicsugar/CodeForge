@@ -1,4 +1,16 @@
 import {test,expect,chromium} from '@playwright/test';
+test('late initialization preserves edits and language contexts stay isolated',async({page})=>{
+  await page.goto('/login');
+  await page.evaluate(async()=>{const root=document.createElement('div');root.id='harness-root';document.body.append(root);const {mount}=await import('/tests/browser/harness.jsx');mount();});
+  const editor=page.getByRole('textbox',{name:'harness editor'});
+  await editor.fill('edited before metadata');await page.getByRole('button',{name:'Metadata ready'}).click();
+  await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await expect(editor).toHaveValue('edited before metadata');
+  await page.getByRole('button',{name:'Switch language'}).click();
+  await expect(editor).toHaveValue('late starter');
+  await editor.fill('python draft');await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Switch language'}).click();await expect(editor).toHaveValue('edited before metadata');
+});
 const problem = id => ({_id:id,problemNumber:1,title:'Persistence test',description:'Test',difficulty:'easy',tags:[],examples:[],constraints:[],starterCode:'// starter'});
 async function mock(context, userId='user-a') {
   await context.addInitScript(id=>{if(!localStorage.getItem('token'))localStorage.setItem('token',`test.${btoa(JSON.stringify({id}))}.signature`);},userId);
@@ -87,4 +99,66 @@ test('storage failure preserves editor contents',async({context,page})=>{
   await page.locator('textarea').fill('still editable');
   await page.waitForTimeout(1000);
   await expect(page.locator('textarea')).toHaveValue('still editable');
+});
+test('lost submission acknowledgement and refresh reuse the persisted key and original ID',async({context,page})=>{
+  await mock(context);
+  let key,created=0,calls=0;
+  await context.route('**/api/v1/submissions',async route=>{
+    if(route.request().method()!=='POST')return route.fallback();
+    const received=route.request().headers()['idempotency-key'];
+    expect(received).toBeTruthy();
+    if(!key){key=received;created++;}else expect(received).toBe(key);
+    if(++calls===1)return route.abort('failed');
+    await route.fulfill({json:{success:true,data:{submissionId:'original-id',status:'pending',enqueueState:'queued'}}});
+  });
+  await context.route('**/api/v1/submissions/original-id',route=>route.fulfill({json:{data:{_id:'original-id',status:'accepted',passedTests:1,totalTests:1,sampleResults:[]}}}));
+  await page.goto('/problems/p');await expect(page.locator('textarea')).toHaveValue('// starter');
+  await page.locator('textarea').fill('submitted once');
+  await page.locator('#submit-code-btn').click();
+  await expect.poll(()=>calls).toBeGreaterThanOrEqual(1);
+  await page.reload();
+  await expect(page.locator('textarea')).toHaveValue('submitted once');
+  await expect.poll(()=>calls).toBeGreaterThanOrEqual(2);
+  await expect(page.locator('.dp-verdict-chip').filter({hasText:'Accepted'}).first()).toBeVisible();
+  expect(created).toBe(1);
+});
+test('battle refresh and reconnect preserve draft and refetch authoritative state',async({context,page})=>{
+  await mock(context);
+  await context.route('**/src/services/socket.js',route=>route.fulfill({contentType:'text/javascript',body:`
+    const handlers=new Map();
+    const socket={connected:true,on(n,h){if(!handlers.has(n))handlers.set(n,new Set());handlers.get(n).add(h);},off(n,h){handlers.get(n)?.delete(h);},emit(n){if(n==='rejoin_battle')window.rejoins=(window.rejoins||0)+1;},connect(){socket.connected=true;for(const h of handlers.get('connect')||[])h();}};
+    window.testSocket=socket;export const getSocket=()=>socket;export const disconnectSocket=()=>{};
+  `}));
+  let reads=0;
+  await context.route('**/api/v1/battles/b1',route=>{reads++;return route.fulfill({json:{data:{_id:'b1',status:'in_progress',problem:problem('p'),player1:{user:{_id:'user-a',name:'A'},initialRating:1200},player2:{user:{_id:'user-b',name:'B'},initialRating:1200}}}});});
+  await page.goto('/battle/b1');await expect(page.locator('textarea')).toHaveValue('// starter');
+  await page.locator('textarea').fill('battle draft');await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  const before=reads;await page.evaluate(()=>window.testSocket.connect());
+  await expect.poll(()=>reads).toBeGreaterThan(before);
+  await expect(page.locator('textarea')).toHaveValue('battle draft');
+  await page.reload();await expect(page.locator('textarea')).toHaveValue('battle draft');
+});
+test('403 retains the account; 401 expires it without deleting its draft',async({context,page})=>{
+  await mock(context);await page.goto('/problems/p');
+  await expect(page.locator('textarea')).toHaveValue('// starter');
+  await page.locator('textarea').fill('retained after auth failure');
+  await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await context.route('**/users/me',route=>route.fulfill({status:403,json:{message:'Forbidden'}}));
+  await page.reload();await expect(page.locator('textarea')).toHaveValue('retained after auth failure');
+  expect(await page.evaluate(()=>!!localStorage.getItem('token'))).toBe(true);
+  await context.route('**/users/me',route=>route.fulfill({status:401,json:{message:'Expired'}}));
+  await page.reload();await expect(page).toHaveURL(/\/login$/);
+  expect(await page.evaluate(()=>localStorage.getItem('token'))).toBeNull();
+  const drafts=await page.evaluate(async()=>{
+    const {openStorage}=await import('/src/services/draftStorage.js');const db=await openStorage();
+    return new Promise(resolve=>{const request=db.transaction('drafts').objectStore('drafts').getAll();request.onsuccess=()=>resolve(request.result);});
+  });
+  expect(drafts.some(draft=>draft.code==='retained after auth failure')).toBe(true);
+});
+test('repeated socket access while disconnected reuses one instance',async({context,page})=>{
+  await mock(context);await page.goto('/problems/p');await expect(page.locator('textarea')).toHaveValue('// starter');
+  expect(await page.evaluate(async()=>{
+    const {getSocket}=await import('/src/services/socket.js');const first=getSocket();
+    return !!first&&getSocket()===first&&getSocket()===first;
+  })).toBe(true);
 });

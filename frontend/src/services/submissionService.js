@@ -1,9 +1,7 @@
 import api from "./api";
+import {submitReliably} from './submissionRecovery';
 
-export const createSubmission = async ({ problem, language, code }) => {
-  const response = await api.post("/submissions", { problem, language, code });
-  return response.data;
-};
+export const createSubmission = submitReliably;
 
 export const runCode = async ({ problem, language, code }) => {
   const response = await api.post("/submissions/run", { problem, language, code });

@@ -76,3 +76,32 @@ export async function getIntent(key) {
     tx.onabort = tx.onerror = () => reject(tx.error || new Error('Could not read submission intent.'));
   });
 }
+export async function prepareIntent(key, userId, payload) {
+  const db = await openStorage();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('intents','readwrite');const store=tx.objectStore('intents');let result,failure;
+    store.get(key).onsuccess=event=>{
+      const current=event.target.result;
+      if(current && !current.completed) {
+        if(JSON.stringify(current.payload)!==JSON.stringify(payload)) {failure=new Error('An earlier submission is unresolved. Recover it before submitting different code.');tx.abort();return;}
+        result=current;
+      } else {
+        result={key,userId,payload,idempotencyKey:crypto.randomUUID(),updatedAt:Date.now(),completed:false};store.put(result);
+      }
+    };
+    tx.oncomplete=()=>resolve(result);
+    tx.onabort=tx.onerror=()=>reject(failure||tx.error||new Error('Could not persist submission intent.'));
+  });
+}
+export async function patchIntent(intent, changes) {
+  const db=await openStorage();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('intents','readwrite');const store=tx.objectStore('intents');let updated=false;
+    store.get(intent.key).onsuccess=event=>{
+      const current=event.target.result;
+      if(current?.idempotencyKey===intent.idempotencyKey){store.put({...current,...changes});updated=true;}
+    };
+    tx.oncomplete=()=>resolve(updated);
+    tx.onabort=tx.onerror=()=>reject(tx.error||new Error('Intent update failed'));
+  });
+}

@@ -1,8 +1,33 @@
 const submissionRepository = require("../repositories/submission.repository");
 const problemRepository = require("../repositories/problem.repository");
-const submissionQueue = require("../queues/submission.queue");
+const Submission = require('../models/Submission');
+const {createHash} = require('node:crypto');
+const {enqueue} = require('./submissionEnqueue.service');
+const failure = (status,message) => Object.assign(new Error(message),{status});
+function fingerprint(data) {
+    return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,data.code,data.battleId ? String(data.battleId) : null])).digest('hex');
+}
 
 const createSubmission = async (submissionData, userId) => {
+    const key=submissionData.idempotencyKey;
+    if (key !== undefined && (typeof key !== 'string' || !/^[a-zA-Z0-9-]{16,100}$/.test(key))) throw failure(400,'Invalid submission key');
+    const operation=submissionData.battleId ? 'battle-submit' : 'submit';
+    const payloadHash=fingerprint(submissionData);
+    const replay=async existing=>{
+        if(existing.payloadHash!==payloadHash)throw failure(409,'Submission key belongs to different code or context');
+        existing.replayed=true;
+        if(existing.status==='pending'&&existing.enqueueState!=='queued'&&existing.enqueueAttempts<5)await enqueue(existing);
+        return existing;
+    };
+    if(key){const existing=await Submission.findOne({user:userId,operation,idempotencyKey:key});if(existing)return replay(existing);}
+    if(typeof submissionData.code!=='string'||submissionData.code.length>50000)throw failure(400,'Code must be at most 50000 characters');
+    if(submissionData.battleId){
+        const battleService=require('./battle.service');
+        await battleService.getPlayerNumber(submissionData.battleId,userId);
+        const battle=await battleService.getBattleById(submissionData.battleId);
+        if(battle.status!=='in_progress')throw failure(409,'Battle is not active');
+        if(String(battle.problem._id||battle.problem)!==String(submissionData.problem))throw failure(400,'Battle problem mismatch');
+    }
 
     const problem = await problemRepository.findById(submissionData.problem);
 
@@ -13,22 +38,25 @@ const createSubmission = async (submissionData, userId) => {
     if (submissionData.language !== "cpp") {
         throw new Error("Only C++ is supported currently");
     }
-    const submission = await submissionRepository.create({
+    let submission;
+    try { submission = await submissionRepository.create({
+        operation, ...(key ? {idempotencyKey:key,payloadHash}:{}),enqueueState:'waiting',
         user: userId,
         problem: submissionData.problem,
         language: submissionData.language,
         code: submissionData.code,
         status: "pending",
         battle: submissionData.battleId || null
-    });
-
-    await submissionQueue.add("judge-submission", {
-            submissionId: submission._id.toString(),
-            userId: userId.toString(),
-            battleId: submissionData.battleId ? submissionData.battleId.toString() : null
-        }
-    );
-    return submission;
+    }); } catch(error) {
+        if(error.code===11000&&key){const existing=await Submission.findOne({user:userId,operation,idempotencyKey:key});if(existing)return replay(existing);}
+        throw error;
+    }
+    if(submissionData.battleId) {
+        const battleService=require('./battle.service');
+        const playerNumber=await battleService.getPlayerNumber(submissionData.battleId,userId);
+        await require('../repositories/battle.repository').updatePlayer(submissionData.battleId,playerNumber,{code:submissionData.code,status:'submitted'});
+    }
+    return enqueue(submission);
 };
 
 const getSubmissionById = async (id, userId) => {

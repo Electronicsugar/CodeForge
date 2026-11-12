@@ -3,7 +3,8 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getSocket } from "../services/socket";
 import { getBattleById } from "../services/battleService";
-import { runCode } from "../services/submissionService";
+import { runCode, createSubmission } from "../services/submissionService";
+import {useSubmissionRecovery} from '../hooks/useSubmissionRecovery';
 import "./BattleArena.css";
 import { useCodeDraft } from '../hooks/useCodeDraft';
 import DraftStatus from '../components/DraftStatus';
@@ -46,6 +47,9 @@ function BattleArena() {
   const [runResult, setRunResult] = useState(null);
   const [submitResult, setSubmitResult] = useState(null);
   const [execError, setExecError] = useState("");
+  const recovery=useSubmissionRecovery({problem:problem?._id,context:'battle',battleId},result=>{
+    setSubmitResult(result);setConsoleMode('submit');setSubmitting(['pending','running'].includes(result.status)&&result.enqueueState!=='enqueue_failed');
+  });
 
   // Timer (Default 15 minutes)
   const [timeLeft, setTimeLeft] = useState(15 * 60);
@@ -257,21 +261,18 @@ function BattleArena() {
   };
 
   // Submit Battle Code (Official Battle Submission)
-  const handleSubmitCode = () => {
+  const handleSubmitCode = async () => {
     if (submitting || !code.trim()) return;
     setSubmitting(true);
     setExecError("");
     setConsoleMode("submit");
     setSubmitResult({ status: "pending" });
 
-    const socket = getSocket();
-    if (socket) {
-      socket.emit("submit_battle_code", {
-        battleId,
-        code,
-        language: "cpp"
-      });
-    }
+    try {
+      await draft.flush();
+      await createSubmission({userId:user?._id||user?.id,context:'battle',problem:problem._id,battleId,code,language:'cpp'});
+      recovery.recover();
+    } catch(error){setSubmitting(false);setExecError(error.message);}
   };
 
   // Surrender Handler
@@ -468,6 +469,7 @@ function BattleArena() {
               ))}
             </div>
             <DraftStatus draft={draft} />
+            <div role="status" style={{fontSize:12}}>{recovery.error}<button type="button" onClick={recovery.recover}>Recover submission status</button></div>
             <textarea
               ref={textareaRef}
               className="code-textarea"

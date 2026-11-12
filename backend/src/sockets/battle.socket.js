@@ -134,7 +134,7 @@ const registerBattleSocket = (io, socket) => {
     // 5. submit battle code
     socket.on("submit_battle_code", async (data) => {
         try {
-            const { battleId, code, language = "cpp" } = data;
+            const { battleId, code, language = "cpp", idempotencyKey } = data;
             const userId = socket.user.id;
 
             const battle = await battleRepository.findBattleById(battleId);
@@ -142,29 +142,25 @@ const registerBattleSocket = (io, socket) => {
                 socket.emit("battle_error", { message: "Battle not found" });
                 return;
             }
-            if (battle.status !== "in_progress") {
+            if (battle.status !== "in_progress" && !idempotencyKey) {
                 socket.emit("battle_error", { message: "Battle is not active" });
                 return;
             }
 
             const playerNumber = await battleService.getPlayerNumber(battleId, userId);
 
-            // Save submitted code
-            await battleRepository.updatePlayer(battleId, playerNumber, {
-                code, status: "submitted"
-            });
-
             // Create submission in queue
             const submission = await submissionService.createSubmission({
                 problem: battle.problem._id || battle.problem,
                 language,
                 code,
-                battleId
+                battleId, idempotencyKey
             }, userId);
 
             socket.emit("battle_submission_queued", {
                 battleId,
                 submissionId: submission._id,
+                enqueueState:submission.enqueueState,
                 message: "Code submitted. Judging..."
             });
 

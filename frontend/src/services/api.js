@@ -9,6 +9,7 @@ const api = axios.create({
 
 // REQUEST interceptor — attach JWT token to every request
 api.interceptors.request.use((config) => {
+  if (config.sessionToken && config.sessionToken !== localStorage.getItem('token')) return Promise.reject(new Error('Account changed; request cancelled.'));
   if (!['get','head','options'].includes(config.method || 'get') && !config.url.startsWith('/auth/') && !sessionVerified()) {
     return Promise.reject(new Error('Session is not verified. Your code remains saved locally.'));
   }

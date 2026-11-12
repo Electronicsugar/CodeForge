@@ -4,18 +4,19 @@ const submissionQueue = require("../queues/submission.queue");
 
 const createSubmission = async (req, res) => {
     try {
-        const submission = await submissionService.createSubmission(req.body, req.user.id);
+        const submission = await submissionService.createSubmission({...req.body,idempotencyKey:req.get('Idempotency-Key') || req.body.idempotencyKey}, req.user.id);
 
         res.status(201).json({
             success: true,
-            message: "Submission queued successfully",
+            message: submission.enqueueState === 'queued' ? 'Submission queued successfully' : 'Submission saved; queue recovery pending',
             data: {
                 submissionId: submission._id,
                 status: submission.status
+                ,enqueueState: submission.enqueueState, enqueueError:submission.enqueueError
             }
         });
     } catch (error) {
-        res.status(500).json({
+        res.status(error.status || 500).json({
             success: false,
             message: error.message
         });

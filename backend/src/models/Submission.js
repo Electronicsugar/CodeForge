@@ -2,6 +2,13 @@ const mongoose = require("mongoose");
 
 const submissionSchema = new mongoose.Schema(
     {
+        operation: { type: String, default: 'submit' },
+        idempotencyKey: { type: String },
+        payloadHash: { type: String },
+        enqueueState: { type: String, enum: ['waiting','queued','enqueue_failed'] },
+        enqueueAttempts: { type: Number, default: 0 },
+        nextEnqueueAt: { type: Date },
+        enqueueError: { type: String },
         user: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
@@ -56,4 +63,8 @@ const submissionSchema = new mongoose.Schema(
     }
 )
 
+submissionSchema.index({user:1,operation:1,idempotencyKey:1}, {
+    unique:true, partialFilterExpression:{idempotencyKey:{$type:'string'}}
+});
+submissionSchema.index({status:1,enqueueState:1,nextEnqueueAt:1});
 module.exports = mongoose.model("Submission", submissionSchema);

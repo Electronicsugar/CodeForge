@@ -25,17 +25,17 @@ export function AuthProvider({children}) {
   const verifyUser=useCallback(async()=>{
     const saved=localStorage.getItem('token');
     if (!saved) {setLoading(false);return;}
-    if (checking.current) return;
-    checking.current=true;
+    if (checking.current===saved) return;
+    checking.current=saved;
     try {
       const res=await getCurrentUser();
       if (localStorage.getItem('token')!==saved) return;
-      verifySession(saved);setVerified(true);setUser(res.data);
+      verifySession(saved,res.data._id||res.data.id);setVerified(true);setUser(res.data);
     } catch(error) {
       if (localStorage.getItem('token')!==saved) return;
       if (error.response?.status===401) clear();
       else {invalidateSession();setVerified(false);}
-    } finally {checking.current=false;setLoading(false);}
+    } finally {if(checking.current===saved)checking.current=false;setLoading(false);}
   },[clear]);
   useEffect(()=>{verifyUser();},[verifyUser,token]);
   useEffect(()=>{

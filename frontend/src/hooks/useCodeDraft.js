@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { draftKey, readDraft, writeDraft, DraftConflict } from '../services/draftStorage';
 import { draftChannel } from '../services/draftChannel';
 
@@ -9,13 +9,13 @@ export function useCodeDraft(identity, starterCode = '', ready = true) {
   const writer = useRef(crypto.randomUUID());
   const active = useRef(null);
   const [, render] = useState(0);
-  const redraw = session => { if (active.current === session) render(n => n + 1); };
+  const redraw = useCallback(session => { if (active.current === session) render(n => n + 1); }, []);
   if (active.current?.key !== key) {
     active.current = {key, code:'', revision:0, initialized:false, dirty:false, status:'Loading draft', conflict:null, saving:false};
   }
   const session = active.current;
   const channel = useRef(null);
-  const save = async target => {
+  const save = useCallback(async function persist(target) {
     if (!target.key || !target.initialized || !target.dirty || target.conflict || target.saving || target.blocked) return;
     target.saving = true;
     target.status = 'Saving'; redraw(target);
@@ -31,9 +31,9 @@ export function useCodeDraft(identity, starterCode = '', ready = true) {
       else { target.status = 'Save failed'; target.error = error.message; }
     } finally {
       target.saving = false; redraw(target);
-      if (target.dirty && target.status === 'Unsaved changes') target.timer = setTimeout(() => save(target), 750);
+      if (target.dirty && target.status === 'Unsaved changes') target.timer = setTimeout(() => persist(target), 750);
     }
-  };
+  }, [redraw]);
   useEffect(() => {
     if (!session.key || !ready || session.initialized) return;
     let cancelled = false;
@@ -56,7 +56,7 @@ export function useCodeDraft(identity, starterCode = '', ready = true) {
       session.status = 'Save failed'; session.error = error.message; redraw(session);
     });
     return () => { cancelled = true; };
-  }, [key, ready, starterCode]);
+  }, [session, ready, starterCode, save, redraw]);
   useEffect(() => {
     const check = async notification => {
       if (!session.key || !session.initialized || (notification && (notification.key !== session.key || notification.writerId === writer.current))) return;
@@ -79,7 +79,7 @@ export function useCodeDraft(identity, starterCode = '', ready = true) {
       window.removeEventListener('focus', onFocus); window.removeEventListener('pagehide', flush);
       document.removeEventListener('visibilitychange', hidden);
     };
-  }, [key]);
+  }, [session, save, redraw]);
   const setCode = value => {
     session.code = typeof value === 'function' ? value(session.code) : value;
     session.dirty = true; session.status = session.blocked ? 'Save failed' : session.conflict ? 'Draft conflict' : 'Unsaved changes';
@@ -100,5 +100,10 @@ export function useCodeDraft(identity, starterCode = '', ready = true) {
       redraw(session);
     } catch (error) { session.status = 'Save failed'; session.error = error.message; redraw(session); }
   };
-  return {code:session.code, setCode, status:session.status, error:session.error, conflict:session.conflict, resolve, initialized:session.initialized};
+  const flush = async () => {
+    clearTimeout(session.timer);
+    while(session.saving) await new Promise(resolve=>setTimeout(resolve,20));
+    await save(session);
+  };
+  return {code:session.code, setCode, status:session.status, error:session.error, conflict:session.conflict, resolve, flush, initialized:session.initialized};
 }

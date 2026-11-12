@@ -35,6 +35,8 @@ setupSocket(io);
 connectDB().then(async () => {
 
     await connectRedis();
+    await require('./src/models/Submission').init();
+    require('./src/services/submissionEnqueue.service').start();
 
     startContestRatingScheduler();
 
