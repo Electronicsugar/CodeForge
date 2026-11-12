@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ConnectionProvider } from './context/ConnectionContext';
 
 import Login        from "./pages/Login";
 import Register     from "./pages/Register";
@@ -22,6 +23,7 @@ function App() {
     <BrowserRouter>
       {/* AuthProvider must be inside BrowserRouter so useNavigate works inside it */}
       <AuthProvider>
+        <ConnectionProvider>
         <Routes>
           <Route path="/login"    element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -76,6 +78,7 @@ function App() {
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </ConnectionProvider>
       </AuthProvider>
     </BrowserRouter>
   );

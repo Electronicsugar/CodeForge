@@ -111,6 +111,7 @@ const registerBattleSocket = (io, socket) => {
             });
 
             socket.to(roomId).emit("opponent_progress", {
+                battleId,
                 passedTests, totalTests
             });
 
@@ -121,9 +122,11 @@ const registerBattleSocket = (io, socket) => {
     });
 
     // 4. REAL-TIME CODE SYNC / TYPING STATUS
-    socket.on("code_sync", ({ battleId, codeLength, linesCount }) => {
+    socket.on("code_sync", async ({ battleId, codeLength, linesCount }) => {
+        try { await battleService.getPlayerNumber(battleId, socket.user.id); } catch { return; }
         const roomId = `battle:${battleId}`;
         socket.to(roomId).emit("opponent_code_sync", {
+            battleId,
             codeLength, linesCount
         });
     });
@@ -160,6 +163,7 @@ const registerBattleSocket = (io, socket) => {
             }, userId);
 
             socket.emit("battle_submission_queued", {
+                battleId,
                 submissionId: submission._id,
                 message: "Code submitted. Judging..."
             });
@@ -177,6 +181,7 @@ const registerBattleSocket = (io, socket) => {
             const battle = await battleRepository.findBattleById(battleId);
 
             if (battle && battle.status === "in_progress") {
+                await battleService.getPlayerNumber(battleId, userId);
                 const roomId = `battle:${battleId}`;
                 socket.join(roomId);
 

@@ -27,6 +27,7 @@ const submissionWorker = new Worker("submission-queue", async (job) => {
 
         // 4. Send judge result to both battle players
         io.to(roomId).emit("battle_submission_result", {
+            battleId: submission.battle.toString(),
             submissionId,
             userId: userId.toString(),
             status: result.status,

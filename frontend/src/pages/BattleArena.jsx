@@ -22,7 +22,7 @@ function BattleArena() {
   const { battleId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, verified } = useAuth();
 
   const [battle, setBattle] = useState(location.state?.initialMatch || null);
   const [problem, setProblem] = useState(location.state?.initialMatch?.problem || null);
@@ -59,14 +59,14 @@ function BattleArena() {
 
   // 1. Initial Battle Data Fetch & Reconnect
   useEffect(() => {
+    let cancelled = false, requestGeneration = 0;
     const socket = getSocket();
-    if (socket) {
-      socket.emit("rejoin_battle", { battleId });
-    }
 
     const fetchBattle = async () => {
+      const generation = ++requestGeneration;
       try {
         const res = await getBattleById(battleId);
+        if (cancelled || generation !== requestGeneration) return;
         setBattle(res.data.data);
         if (res.data.data.problem) {
           setProblem(res.data.data.problem);
@@ -74,12 +74,19 @@ function BattleArena() {
       } catch (err) {
         console.error("Failed to load battle:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    fetchBattle();
-  }, [battleId]);
+    const recover = () => {
+      if (socket?.connected) socket.emit('rejoin_battle', {battleId});
+      fetchBattle();
+    };
+    if (verified) recover();
+    else setLoading(false);
+    socket?.on('connect', recover);
+    return () => { cancelled = true; socket?.off('connect', recover); };
+  }, [battleId, verified]);
 
   // Determine if logged-in user is Player 1 or Player 2
   useEffect(() => {
@@ -98,11 +105,13 @@ function BattleArena() {
 
     // Opponent Live Progress (Passed test cases)
     const handleOpponentProgress = (data) => {
+      if (data.battleId !== battleId) return;
       setOppProgress({ passed: data.passedTests, total: data.totalTests });
     };
 
     // Opponent Code Sync / Typing
-    const handleOpponentCodeSync = () => {
+    const handleOpponentCodeSync = (data) => {
+      if (data.battleId !== battleId) return;
       setOppTyping(true);
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       typingTimerRef.current = setTimeout(() => {
@@ -111,7 +120,8 @@ function BattleArena() {
     };
 
     // Submission Queued
-    const handleSubmissionQueued = () => {
+    const handleSubmissionQueued = (data) => {
+      if (data.battleId !== battleId) return;
       setSubmitting(true);
       setConsoleMode("submit");
       setSubmitResult({ status: "pending" });
@@ -119,6 +129,7 @@ function BattleArena() {
 
     // Submission Result from BullMQ worker
     const handleSubmissionResult = (data) => {
+      if (data.battleId !== battleId || data.userId !== (user?._id || user?.id)) return;
       setSubmitting(false);
       setSubmitResult(data);
       setConsoleMode("submit");
@@ -130,6 +141,7 @@ function BattleArena() {
 
     // Game Ended (Victory / Defeat / Draw / Surrender)
     const handleBattleEnded = (data) => {
+      if (data.battleId !== battleId) return;
       setSubmitting(false);
       setRunning(false);
       setGameOverData(data);
@@ -157,7 +169,7 @@ function BattleArena() {
       socket.off("battle_error", handleBattleError);
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     };
-  }, []);
+  }, [battleId, verified, user?._id, user?.id]);
 
   // 3. Countdown Timer
   useEffect(() => {

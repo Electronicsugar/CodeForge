@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { getCache } = require("../utils/cache");
+const { redisClient } = require('../config/redis');
 const registerBattleSocket = require("./battle.socket");
 const { setIO } = require("./socketManager");
 
@@ -23,7 +23,8 @@ const setupSocket = (io) => {
             if(!token) return next(new Error("Authentication token missing"));
 
             // check blacklist
-            const isBlacklisted = await getCache(`blacklist:${token}`);
+            if (!redisClient.isReady) return next(new Error('Session verification temporarily unavailable'));
+            const isBlacklisted = await redisClient.get(`blacklist:${token}`);
             if(isBlacklisted) return next(new Error("Token has need revoked"))
 
             // Verify JWT

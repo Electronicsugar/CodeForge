@@ -21,7 +21,7 @@ function formatElapsed(seconds) {
 }
 
 function BattleLobby() {
-  const { user } = useAuth();
+  const { user, verified } = useAuth();
   const navigate = useNavigate();
 
   const [isSearching, setIsSearching] = useState(false);
@@ -72,7 +72,7 @@ function BattleLobby() {
       socket.off("queue_error", handleQueueError);
       socket.off("match_found", handleMatchFound);
     };
-  }, [navigate]);
+  }, [navigate, verified]);
 
   // Elapsed timer ticker
   useEffect(() => {

@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { getCache } = require("../utils/cache");
+const { redisClient } = require('../config/redis');
 
 const authMiddleware = async (req, res, next) =>{
     try {
@@ -19,7 +19,9 @@ const authMiddleware = async (req, res, next) =>{
         const token = authHeader.split(" ")[1];
 
         // Check if token has been revoked / blacklisted in Redis
-        const isBlacklisted = await getCache(`blacklist:${token}`);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!redisClient.isReady) return res.status(503).json({success:false,message:'Session verification temporarily unavailable'});
+        const isBlacklisted = await redisClient.get(`blacklist:${token}`);
         if (isBlacklisted) {
             return res.status(401).json({
                 success: false,
@@ -27,14 +29,14 @@ const authMiddleware = async (req, res, next) =>{
             });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.token = token;
         req.user = decoded;
         next();
     } catch (error) {
-        return res.status(401).json({
+        const invalid = ['JsonWebTokenError','TokenExpiredError','NotBeforeError'].includes(error.name);
+        return res.status(invalid ? 401 : 503).json({
             success: false,
-            message: "Invalid or Expired Token"
+            message: invalid ? 'Invalid or Expired Token' : 'Session verification temporarily unavailable'
         });
     }
 }
