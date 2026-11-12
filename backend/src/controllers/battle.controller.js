@@ -21,10 +21,11 @@ const createBattle = async (req, res) => {
 const getBattleById = async (req, res) => {
 
     try {
+        await battleService.getPlayerNumber(req.params.battleId,req.user.id);
         const battle = await battleService.getBattleById(req.params.battleId);
         return res.status(200).json({
             success: true,
-            data: battle
+            data: {...battle.toObject(),teamSize:1,kind:'legacy-1v1'}
         });
     } catch (error) {
         return res.status(error.statusCode || 500).json({

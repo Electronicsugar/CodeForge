@@ -4,6 +4,7 @@ const battleController = require("../controllers/battle.controller");
 const { authMiddleware } = require("../middlewares/auth.middleware");
 
 const router = express.Router();
+router.use('/rooms',require('./battleRoom.routes'));
 
 router.post("/", authMiddleware, battleController.createBattle);
 

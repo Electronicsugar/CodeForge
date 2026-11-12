@@ -1,7 +1,7 @@
 import {useEffect,useState,useRef} from 'react';
 import {useAuth} from '../context/AuthContext';
 import {submissionContext,recoverSubmission} from '../services/submissionRecovery';
-export function useSubmissionRecovery({problem,context='practice',battleId,enabled=true},onResult) {
+export function useSubmissionRecovery({problem,context='practice',battleId,roomId,enabled=true},onResult) {
   const resultHandler=useRef(onResult);resultHandler.current=onResult;
   const {user,verified}=useAuth();
   const [request,setRequest]=useState(0);
@@ -9,7 +9,7 @@ export function useSubmissionRecovery({problem,context='practice',battleId,enabl
   const userId=user?._id||user?.id;
   useEffect(()=>{
     if(!enabled||!verified||!userId||!problem)return;
-    const key=submissionContext({userId,problem,context,battleId});
+    const key=submissionContext({userId,problem,context,battleId,roomId});
     const controller=new AbortController();let timer,disposed=false,failures=0;
     const poll=async()=>{
       try {
@@ -23,6 +23,6 @@ export function useSubmissionRecovery({problem,context='practice',battleId,enabl
     };
     poll();
     return()=>{disposed=true;clearTimeout(timer);controller.abort();};
-  },[userId,verified,problem,context,battleId,request,enabled]);
+  },[userId,verified,problem,context,battleId,roomId,request,enabled]);
   return {error,recover:()=>setRequest(n=>n+1)};
 }

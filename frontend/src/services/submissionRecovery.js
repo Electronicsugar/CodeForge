@@ -1,7 +1,7 @@
 import api from './api';
 import {draftKey,getIntent,prepareIntent,patchIntent} from './draftStorage';
 import {sessionUserId} from './sessionState';
-export const submissionContext = ({userId,problem,context='practice',battleId}) => draftKey({userId,problemId:problem,context,language:'cpp',battleId});
+export const submissionContext = ({userId,problem,context='practice',battleId,roomId}) => draftKey({userId,problemId:problem,context,language:'cpp',battleId:battleId||roomId});
 export async function sendIntent(intent) {
   if(sessionUserId()!==intent.userId)throw new Error('Verify the original account before recovering this submission.');
   const sessionToken=localStorage.getItem('token');

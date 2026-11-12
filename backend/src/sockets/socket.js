@@ -33,6 +33,7 @@ const setupSocket = (io) => {
             // Store authenticated user on socket
             socket.user = decoded;
             socket.token = token;
+            socket.data.userId=decoded.id;
 
             next();
 
@@ -48,9 +49,20 @@ const setupSocket = (io) => {
         console.log(`Socket connected: ${socket.id}`);
 
         console.log(`User connected: ${socket.user.id}`);
+        socket.join(`user:${socket.user.id}`);
+        socket.use(async (_packet,next)=>{
+            try{
+                jwt.verify(socket.token,process.env.JWT_SECRET);
+                if(!redisClient.isReady)throw Error('Session temporarily unavailable');
+                if(await redisClient.get(`blacklist:${socket.token}`))throw Error('Session expired');
+                next();
+            }catch{next(new Error('Session verification failed'));}
+        });
+        socket.on('error',()=>socket.emit('battle_room_error',{message:'Session verification failed. Reconnect and sign in again.'}));
 
         // Register battle events
         registerBattleSocket(io, socket);
+        require('./battleRoom.socket')(io,socket);
 
         // Disconnect
         socket.on("disconnect", (reason) => {

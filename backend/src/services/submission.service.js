@@ -5,13 +5,15 @@ const {createHash} = require('node:crypto');
 const {enqueue} = require('./submissionEnqueue.service');
 const failure = (status,message) => Object.assign(new Error(message),{status});
 function fingerprint(data) {
+    if(data.roomId)return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,data.code,String(data.roomId)])).digest('hex');
     return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,data.code,data.battleId ? String(data.battleId) : null])).digest('hex');
 }
 
 const createSubmission = async (submissionData, userId) => {
     const key=submissionData.idempotencyKey;
     if (key !== undefined && (typeof key !== 'string' || !/^[a-zA-Z0-9-]{16,100}$/.test(key))) throw failure(400,'Invalid submission key');
-    const operation=submissionData.battleId ? 'battle-submit' : 'submit';
+    if(submissionData.roomId&&submissionData.battleId)throw failure(400,'Choose one battle context');
+    const operation=submissionData.roomId?'room-submit':submissionData.battleId ? 'battle-submit' : 'submit';
     const payloadHash=fingerprint(submissionData);
     const replay=async existing=>{
         if(existing.payloadHash!==payloadHash)throw failure(409,'Submission key belongs to different code or context');
@@ -21,6 +23,11 @@ const createSubmission = async (submissionData, userId) => {
     };
     if(key){const existing=await Submission.findOne({user:userId,operation,idempotencyKey:key});if(existing)return replay(existing);}
     if(typeof submissionData.code!=='string'||submissionData.code.length>50000)throw failure(400,'Code must be at most 50000 characters');
+    let roomTeam;
+    if(submissionData.roomId){
+        const checked=await require('./battleRoom.service').selectedProblem(submissionData.roomId,userId,String(submissionData.problem),true);
+        roomTeam=checked.access.team._id;
+    }
     if(submissionData.battleId){
         const battleService=require('./battle.service');
         await battleService.getPlayerNumber(submissionData.battleId,userId);
@@ -47,6 +54,7 @@ const createSubmission = async (submissionData, userId) => {
         code: submissionData.code,
         status: "pending",
         battle: submissionData.battleId || null
+        ,...(submissionData.roomId?{battleRoom:submissionData.roomId,teamId:roomTeam}:{})
     }); } catch(error) {
         if(error.code===11000&&key){const existing=await Submission.findOne({user:userId,operation,idempotencyKey:key});if(existing)return replay(existing);}
         throw error;

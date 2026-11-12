@@ -16,6 +16,11 @@ const submissionWorker = new Worker("submission-queue", async (job) => {
 
     // 2. Get submission from DB
     const submission = await submissionRepository.findById(submissionId);
+    if(submission?.battleRoom){
+        const rooms=require('../services/battleRoom.service');
+        const room=await rooms.load(submission.battleRoom.toString());
+        await rooms.notify(room,'submission_judged');
+    }
 
     // 3. Check whether this is a battle submission
     if (submission && submission.battle) {

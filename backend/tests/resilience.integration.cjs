@@ -39,6 +39,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
       assert.equal((await request(`/problems/${problem._id}`)).status,200);
     });
     const payload=()=>({problem:problem._id.toString(),language:'cpp',code:'class Solution { public: int doubleIt(int n) { return n * 2; } };'});
+    await require('./battleRooms.scenarios.cjs')({t,mongoose,problem,userId,request,until,io});
     await t.test('concurrent replays and lost acknowledgement create one logical submission; real Docker worker accepts it',async()=>{
       const key=randomUUID();const responses=await Promise.all(Array.from({length:3},()=>request('/submissions',payload(),key)));
       const bodies=await Promise.all(responses.map(r=>r.json()));
@@ -73,6 +74,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
       const Battle=require('../src/models/Battle');
       const opponent=await mongoose.model('User').create({name:'Opponent',email:`${randomUUID()}@example.com`,password:'unused-test-hash'});
       const battle=await Battle.create({player1:{user:userId,initialRating:1200},player2:{user:opponent._id,initialRating:1200},problem:problem._id,status:'in_progress',startTime:new Date()});
+      const legacy=await request(`/battles/${battle._id}`);assert.equal(legacy.status,200);assert.equal((await legacy.json()).data.teamSize,1);
       const {io:connect}=require('socket.io-client');
       const socket=connect(`http://127.0.0.1:${server.address().port}`,{auth:{token},transports:['websocket']});
       await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('connect_error',reject);});
@@ -93,6 +95,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
       assert.equal(io.sockets.sockets.get(outsider.id).rooms.has(`battle:${battle._id}`),false);outsider.disconnect();
     });
   } finally {
+    require('../src/services/battleRoom.service').stopExpiry();
     execFileSync('docker',['start','codeforge-resilience-test-redis']);
     await worker.close();await queue.close();connection.disconnect();await enqueue.close();
     await redisClient.quit();io.close();server.close();await mongoose.connection.dropDatabase();await mongoose.disconnect();

@@ -36,6 +36,8 @@ connectDB().then(async () => {
 
     await connectRedis();
     await require('./src/models/Submission').init();
+    await require('./src/models/BattleRoom').init();
+    require('./src/services/battleRoom.service').startExpiry();
     require('./src/services/submissionEnqueue.service').start();
 
     startContestRatingScheduler();

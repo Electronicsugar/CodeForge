@@ -204,6 +204,7 @@ const registerBattleSocket = (io, socket) => {
             if (!battle || battle.status !== "in_progress") return;
 
             const player1Id = battle.player1.user._id.toString();
+            await battleService.getPlayerNumber(battleId,userId);
             const player2Id = battle.player2.user._id.toString();
             const opponentId = userId === player1Id ? player2Id : player1Id;
 

@@ -126,6 +126,7 @@ const runCode = async (req, res) => {
                 message: "Code is required"
             });
         }
+        if(req.body.roomId)await require('../services/battleRoom.service').selectedProblem(req.body.roomId,req.user.id,String(problem),true);
 
         const result = await judgeService.runCode(problem, language, code);
 
