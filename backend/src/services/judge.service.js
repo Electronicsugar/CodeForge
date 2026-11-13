@@ -126,13 +126,22 @@ const judgeSubmission = async (submissionId, userId) => {
         }
     }
 
+    // Room APIs never return hidden test inputs, expected output, or execution
+    // output that could echo them. Legacy judging behaviour is unchanged.
+    if(submission.battleRoom&&failedCase?.isHidden){
+        failedCase={index:failedCase.index,isHidden:true,status:failedCase.status};
+        if(overallStatus!=='compile_error')overallError='A hidden test failed. Test details are private.';
+    }
     await submissionRepository.updateById(submissionId, {
+      $set:{
         status: overallStatus,
         passedTests,
         totalTests: testCases.length,
         runtime: totalRuntime,
         memory: maxMemory,
         error: overallError
+      },
+      ...(submission.battleRoom&&overallStatus==='accepted'?{$min:{acceptedAt:new Date()}}:{})
     });
 
     // Invalidate leaderboard cache for any running contest this submission belongs to
@@ -162,7 +171,7 @@ const judgeSubmission = async (submissionId, userId) => {
     };
 };
 
-const runCode = async (problemId, language, code) => {
+const runCode = async (problemId, language, code, {visibleOnly=false}={}) => {
     const problem = await problemRepository.findById(problemId);
     if (!problem) {
         throw new Error("Problem not found");
@@ -179,6 +188,7 @@ const runCode = async (problemId, language, code) => {
 
     // Filter to only visible/sample test cases
     const visibleTestCases = allTestCases.filter(tc => !tc.isHidden);
+    if(visibleOnly&&!visibleTestCases.length)throw Object.assign(new Error('No public test cases are available. Submit code to run private tests.'),{status:409});
     const testCasesToRun = visibleTestCases.length > 0 ? visibleTestCases : allTestCases.slice(0, 3);
 
     const executableCode = generateCode(problem, code);

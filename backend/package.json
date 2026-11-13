@@ -32,6 +32,8 @@
     "redis": "^6.2.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "validator": "^13.15.35"
+    "validator": "^13.15.35",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33"
   }
 }

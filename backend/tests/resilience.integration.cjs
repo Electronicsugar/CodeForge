@@ -4,6 +4,10 @@ const {execFileSync}=require('node:child_process');
 const {randomUUID}=require('node:crypto');
 test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120000}, async t=>{
   assert.match(process.env.MONGO_URI||'',/\/codeforge_resilience_test$/,'Only a disposable test database is allowed');
+  // Exercise the explicit development policy in the isolated API. Production limits
+  // and ignored overrides are separately exercised in rateLimits.test.cjs.
+  process.env.NODE_ENV='development';process.env.CODEFORGE_DEV_RATE_LIMITS='true';
+  for(const key of ['DEV_AUTH_MAX','DEV_AUTH_WINDOW_MS','DEV_ROOM_MAX','DEV_ROOM_WINDOW_MS','DEV_SUBMISSION_MAX','DEV_SUBMISSION_WINDOW_MS'])delete process.env[key];
   process.env.JWT_SECRET='local-integration-test-secret-not-for-production';
   const mongoose=require('mongoose');
   mongoose.set('bufferCommands',false);
@@ -14,6 +18,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
   const Problem=require('../src/models/Problem');
   const TestCase=require('../src/models/TestCase');
   await Submission.init();
+  for(const model of ['CollaborativeDocument','BehaviourWindow','BehaviourAction'])await require(`../src/models/${model}`).init();
   const http=require('node:http');
   const server=http.createServer(require('../src/app'));
   const io=new (require('socket.io').Server)(server);
@@ -40,6 +45,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
     });
     const payload=()=>({problem:problem._id.toString(),language:'cpp',code:'class Solution { public: int doubleIt(int n) { return n * 2; } };'});
     await require('./battleRooms.scenarios.cjs')({t,mongoose,problem,userId,request,until,io});
+    await require('./collaboration.scenarios.cjs')({t,mongoose,problem,userId,io,until});
     await t.test('concurrent replays and lost acknowledgement create one logical submission; real Docker worker accepts it',async()=>{
       const key=randomUUID();const responses=await Promise.all(Array.from({length:3},()=>request('/submissions',payload(),key)));
       const bodies=await Promise.all(responses.map(r=>r.json()));
@@ -95,6 +101,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
       assert.equal(io.sockets.sockets.get(outsider.id).rooms.has(`battle:${battle._id}`),false);outsider.disconnect();
     });
   } finally {
+    await require('../src/services/collaborativeDocument.service').store.close();
     require('../src/services/battleRoom.service').stopExpiry();
     execFileSync('docker',['start','codeforge-resilience-test-redis']);
     await worker.close();await queue.close();connection.disconnect();await enqueue.close();

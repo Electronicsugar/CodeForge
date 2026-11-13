@@ -5,6 +5,7 @@ const {createHash} = require('node:crypto');
 const {enqueue} = require('./submissionEnqueue.service');
 const failure = (status,message) => Object.assign(new Error(message),{status});
 function fingerprint(data) {
+    if(data.roomId&&(data.collaborative===true||data.sourceHash))return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,String(data.roomId),'shared',data.sourceHash])).digest('hex');
     if(data.roomId)return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,data.code,String(data.roomId)])).digest('hex');
     return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,data.code,data.battleId ? String(data.battleId) : null])).digest('hex');
 }
@@ -22,12 +23,15 @@ const createSubmission = async (submissionData, userId) => {
         return existing;
     };
     if(key){const existing=await Submission.findOne({user:userId,operation,idempotencyKey:key});if(existing)return replay(existing);}
-    if(typeof submissionData.code!=='string'||submissionData.code.length>50000)throw failure(400,'Code must be at most 50000 characters');
+    let sourceSnapshot;
     let roomTeam;
     if(submissionData.roomId){
         const checked=await require('./battleRoom.service').selectedProblem(submissionData.roomId,userId,String(submissionData.problem),true);
         roomTeam=checked.access.team._id;
+        sourceSnapshot=await require('./collaborativeDocument.service').submissionSnapshot(submissionData,userId);
+        if(sourceSnapshot)submissionData={...submissionData,code:sourceSnapshot.code};
     }
+    if(typeof submissionData.code!=='string'||submissionData.code.length>50000)throw failure(400,'Code must be at most 50000 characters');
     if(submissionData.battleId){
         const battleService=require('./battle.service');
         await battleService.getPlayerNumber(submissionData.battleId,userId);
@@ -52,6 +56,7 @@ const createSubmission = async (submissionData, userId) => {
         problem: submissionData.problem,
         language: submissionData.language,
         code: submissionData.code,
+        ...(sourceSnapshot?{documentKey:sourceSnapshot.key,sourceRevision:sourceSnapshot.revision,sourceHash:sourceSnapshot.hash}:{}),
         status: "pending",
         battle: submissionData.battleId || null
         ,...(submissionData.roomId?{battleRoom:submissionData.roomId,teamId:roomTeam}:{})

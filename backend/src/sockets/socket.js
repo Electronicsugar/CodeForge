@@ -6,6 +6,8 @@ const { setIO } = require("./socketManager");
 const setupSocket = (io) => {
 
     setIO(io);
+    const collaboration=require('./collaboration.socket').createCollaboration(io);
+    io.httpServer?.once('close',()=>collaboration.close().catch(error=>console.error('Document shutdown persistence:',error.message)));
 
     // Socket authentication middleware
     io.use(async (socket, next) => {
@@ -63,6 +65,7 @@ const setupSocket = (io) => {
         // Register battle events
         registerBattleSocket(io, socket);
         require('./battleRoom.socket')(io,socket);
+        collaboration.register(socket);
 
         // Disconnect
         socket.on("disconnect", (reason) => {

@@ -113,13 +113,15 @@ const getMyStats = async (req, res) => {
 const runCode = async (req, res) => {
     try {
         const problem = req.body.problem || req.body.problemId;
-        const { language = "cpp", code } = req.body;
+        const { language = "cpp" } = req.body;
+        let code=req.body.code;
         if (!problem) {
             return res.status(400).json({
                 success: false,
                 message: "Problem ID is required"
             });
         }
+        if(req.body.roomId){const snapshot=await require('../services/collaborativeDocument.service').submissionSnapshot({...req.body,problem,language},req.user.id);if(snapshot)code=snapshot.code;}
         if (!code) {
             return res.status(400).json({
                 success: false,
@@ -127,8 +129,9 @@ const runCode = async (req, res) => {
             });
         }
         if(req.body.roomId)await require('../services/battleRoom.service').selectedProblem(req.body.roomId,req.user.id,String(problem),true);
+        if(req.body.roomId){try{await require('../services/behaviour.service').recordRun(req.body.roomId,req.user.id,String(problem));}catch{console.warn('Run analytics unavailable');}}
 
-        const result = await judgeService.runCode(problem, language, code);
+        const result = await judgeService.runCode(problem, language, code,{visibleOnly:Boolean(req.body.roomId)});
 
         res.status(200).json({
             success: true,
@@ -136,7 +139,7 @@ const runCode = async (req, res) => {
             data: result
         });
     } catch (error) {
-        res.status(500).json({
+        res.status(error.status||500).json({
             success: false,
             message: error.message
         });

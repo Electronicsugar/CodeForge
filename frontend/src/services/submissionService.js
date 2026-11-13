@@ -3,8 +3,8 @@ import {submitReliably} from './submissionRecovery';
 
 export const createSubmission = submitReliably;
 
-export const runCode = async ({ problem, language, code, roomId }) => {
-  const response = await api.post("/submissions/run", { problem, language, code, ...(roomId?{roomId}:{}) });
+export const runCode = async ({ problem, language, code, roomId,collaborative,sourceHash }) => {
+  const response = await api.post("/submissions/run", { problem, language, code, ...(roomId?{roomId}:{}),...(collaborative?{collaborative,sourceHash}:{}) });
   return response.data;
 };
 

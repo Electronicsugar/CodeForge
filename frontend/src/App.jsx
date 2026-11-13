@@ -9,6 +9,7 @@ import ProblemDetail from "./pages/ProblemDetail";
 import BattleLobby   from "./pages/BattleLobby";
 import BattleArena   from "./pages/BattleArena";
 import BattleRoom from './pages/BattleRoom';
+import BehaviourProfile from './pages/BehaviourProfile';
 import Contests      from "./pages/Contests";
 import ContestDetail from "./pages/ContestDetail";
 import CreateContest from "./pages/CreateContest";
@@ -53,6 +54,7 @@ function App() {
             <ProtectedRoute><BattleArena /></ProtectedRoute>
           } />
           <Route path="/battle/rooms/:roomId" element={<ProtectedRoute><BattleRoom/></ProtectedRoute>}/>
+          <Route path="/battle/rooms/:roomId/profile" element={<ProtectedRoute><BehaviourProfile/></ProtectedRoute>}/>
 
           <Route path="/contests" element={
             <ProtectedRoute><Contests /></ProtectedRoute>

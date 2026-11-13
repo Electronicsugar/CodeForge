@@ -37,6 +37,9 @@ connectDB().then(async () => {
     await connectRedis();
     await require('./src/models/Submission').init();
     await require('./src/models/BattleRoom').init();
+    await require('./src/models/CollaborativeDocument').init();
+    await require('./src/models/BehaviourWindow').init();
+    await require('./src/models/BehaviourAction').init();
     require('./src/services/battleRoom.service').startExpiry();
     require('./src/services/submissionEnqueue.service').start();
 

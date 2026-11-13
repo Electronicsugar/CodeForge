@@ -8,7 +8,7 @@ import {claimEditor} from '../services/editorOwnership';
 export function useCodeDraft(identity, starterCode = '', ready = true) {
   const key = identity.userId && identity.problemId ? draftKey(identity) : null;
   const multiTab = (identity.context || 'practice') === 'practice' && !identity.battleId;
-  const scope = !multiTab && identity.userId ? JSON.stringify([identity.userId,identity.context,identity.battleId || '']) : null;
+  const scope = !multiTab && identity.userId ? JSON.stringify([identity.userId,identity.ownershipContext||identity.context,identity.battleId || '']) : null;
   const [ownership,setOwnership]=useState({scope:null,state:'waiting'});
   const [ownershipAttempt,setOwnershipAttempt]=useState(0);
   const sessions=useRef(new Set());

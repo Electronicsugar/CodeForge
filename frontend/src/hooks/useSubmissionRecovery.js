@@ -19,7 +19,7 @@ export function useSubmissionRecovery({problem,context='practice',battleId,roomI
         if(result)resultHandler.current(result);
         if(result&&['pending','running'].includes(result.status)&&result.enqueueState!=='enqueue_failed')timer=setTimeout(poll,2000);
         else if(result?.enqueueState==='enqueue_failed')setError(result.enqueueError||'Queue unavailable. Recover again when service returns.');
-      } catch(err){if(!disposed){setError(err.message);if(++failures<3)timer=setTimeout(poll,2000*2**failures);}}
+      } catch(err){if(!disposed){setError(err.message);if(err.status!==429&&err.response?.status!==429&&++failures<3)timer=setTimeout(poll,2000*2**failures);}}
     };
     poll();
     return()=>{disposed=true;clearTimeout(timer);controller.abort();};

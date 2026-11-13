@@ -27,6 +27,7 @@ const submissionSchema = new mongoose.Schema(
         code: {
             type: String,
             required: true,
+            immutable: true,
         },
         status: {
             type: String,
@@ -60,6 +61,10 @@ const submissionSchema = new mongoose.Schema(
         },
         battleRoom:{type:mongoose.Schema.Types.ObjectId,ref:'BattleRoom'},
         teamId:{type:mongoose.Schema.Types.ObjectId},
+        documentKey:{type:String,immutable:true},
+        sourceRevision:{type:Number,immutable:true},
+        sourceHash:{type:String,immutable:true},
+        acceptedAt:{type:Date},
     }, {
         timestamps: true
     }
