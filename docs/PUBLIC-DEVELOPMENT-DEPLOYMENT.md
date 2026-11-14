@@ -1,5 +1,21 @@
 # Public development deployment
 
+## Current frontend
+
+The production frontend is https://codeforge-three-iota.vercel.app, deployed to
+the `codeforge` project on the existing CodeForge Hobby team. It is deployed from
+the `frontend` directory using the Vercel CLI; automatic Git deployments are not
+configured. The project stores the public API and Socket.IO URLs for production
+and preview builds. The backend currently remains a local process exposed through
+a temporary Cloudflare tunnel, so the Vercel website still depends on this
+computer and the backend tunnel remaining available.
+
+On 15 November 2026, the remote frontend build and anonymous-browser smoke checks
+passed: frontend rendering, Online status, browser cross-origin problem loading,
+direct `/login` navigation, health status, rejection of unauthenticated profile
+requests, and rejection of unauthenticated WebSocket connections. Authenticated
+battle/judge flows were not rerun as part of this deployment.
+
 The frontend can run on Vercel. The existing Node/Socket.IO backend, BullMQ
 worker, MongoDB, Redis and Docker C++ runner must remain running separately.
 Deploy only `frontend` to Vercel; never upload the backend `.env` or database.
