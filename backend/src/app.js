@@ -6,9 +6,10 @@ const app = express();
 
 const routes = require("./routes/index");
 
-// Allow requests from frontend URL (set FRONTEND_URL in env on Render)
+// Deployment may expose the same frontend through more than one public URL.
+// Keep an explicit allowlist; FRONTEND_URL also accepts comma-separated origins.
 const allowedOrigins = process.env.FRONTEND_URL
-    ? [process.env.FRONTEND_URL, "http://localhost:5173"]
+    ? [...process.env.FRONTEND_URL.split(',').map(origin => origin.trim()).filter(Boolean), "http://localhost:5173"]
     : ["*"];
 
 app.use(cors({
