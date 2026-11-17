@@ -3,6 +3,8 @@ const jwt=require('jsonwebtoken');
 const rooms=require('../services/battleRoom.service');
 const {redisClient}=require('../config/redis');
 const User=require('../models/User');
+const {isSupported}=require('../services/executor/languages');
+const {buildStarterCodes}=require('../services/executor/starter-generator');
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const MAX_UPDATE=512*1024;
 const binary=value=>{if(!(Buffer.isBuffer(value)||value instanceof Uint8Array))throw fail(400,'A binary Yjs update is required');if(value.byteLength>MAX_UPDATE)throw fail(413,'Document update is too large');return new Uint8Array(value);};
@@ -12,7 +14,7 @@ function createCollaboration(io,{authorize,store=require('../services/collaborat
   const check=authorize||(async(socket,request)=>{
     const claims=jwt.verify(socket.token,process.env.JWT_SECRET);
     if(claims.id!==socket.user.id||!redisClient.isReady||await redisClient.get(`blacklist:${socket.token}`))throw fail(403,'Session verification failed');
-    if(request.language!=='cpp')throw fail(400,'Only C++ documents are supported');
+    if(!isSupported(request.language))throw fail(400,'Unsupported document language');
     const {room,access,problem}=await rooms.selectedProblem(request.roomId,claims.id,request.problemId,false);
     if(room.editorMode!=='collaborative')throw fail(409,'This older room retains its private drafts. Create a new room for collaborative editing.');
     if(!access.member)throw fail(403,'Only competitors may access shared source');
@@ -20,7 +22,7 @@ function createCollaboration(io,{authorize,store=require('../services/collaborat
     if(request.teamId&&request.teamId!==teamId)throw fail(403,'Document belongs to another team');
     const user=await User.findById(claims.id).select('name').lean();
     if(!user)throw fail(403,'Participant unavailable');
-    return {key:JSON.stringify([String(room._id),teamId,String(problem._id),'cpp']),userId:claims.id,name:user.name,teamId,starter:problem.starterCode||'',canWrite:room.status==='in_progress',startTime:room.startTime,endTime:room.endTime};
+    return {key:JSON.stringify([String(room._id),teamId,String(problem._id),request.language]),userId:claims.id,name:user.name,teamId,starter:buildStarterCodes(problem)[request.language],canWrite:room.status==='in_progress',startTime:room.startTime,endTime:room.endTime};
   });
   function budget(socket,size=0){
     const now=Date.now(),key=socket.user.id;let entry=budgets.get(key);
@@ -56,7 +58,7 @@ function createCollaboration(io,{authorize,store=require('../services/collaborat
       if([...entry.clients.values()].some(client=>client.socket.id!==socket.id&&client.clientId===request.clientId))throw fail(409,'Yjs client identity is already in use');
       if(entry.clients.size>=16&&!entry.clients.has(socket.id))throw fail(429,'Too many document connections');
       detach(socket);
-      const subscription={key:access.key,clientId:request.clientId,clock:0,state:null,request:{roomId:request.roomId,problemId:request.problemId,language:'cpp',teamId:access.teamId},socket,user:{id:access.userId,name:access.name.slice(0,80),color:'#d99053'}};
+      const subscription={key:access.key,clientId:request.clientId,clock:0,state:null,request:{roomId:request.roomId,problemId:request.problemId,language:request.language,teamId:access.teamId},socket,user:{id:access.userId,name:access.name.slice(0,80),color:'#d99053'}};
       socket.data.collaboration=subscription;entry.clients.set(socket.id,subscription);await socket.join(`collab:${access.key}`);
       return {key:access.key,update:Y.encodeStateAsUpdate(entry.doc),canWrite:access.canWrite!==false,serverTime:Date.now(),startTime:access.startTime,endTime:access.endTime,user:subscription.user,presence:[...entry.clients.values()].filter(client=>client.state).map(client=>({key:entry.key,clientId:client.clientId,clock:client.clock,state:client.state}))};
     });

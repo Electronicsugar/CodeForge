@@ -28,7 +28,7 @@ const generateRulesAnalysis = (m) => {
     if (m.typing.longestStallSec != null && m.typing.longestStallSec >= 120) add(behaviour, `Your longest stall without any editing was ${mmss(m.typing.longestStallSec)}. When stuck, write a brute-force first, then optimise.`);
     if (m.typing.rewriteRatio >= 0.45 && m.typing.samples >= 6) add(behaviour, `About ${Math.round(m.typing.rewriteRatio * 100)}% of the code you typed was deleted again, which suggests restarting an approach midway.`);
     if (m.timing.firstSubmitSec != null && m.timing.firstSubmitSec < 60 && failures > 0) add(behaviour, "Your first submission came within a minute. Fast submits are only worth it when the solution is trivial.");
-    if (m.integrity.strikes > 0) add(behaviour, `${m.integrity.strikes} historical integrity warning(s) were recorded. Interaction patterns alone do not establish misconduct.`);
+    if (m.integrity.strikes > 0) add(behaviour, `${m.integrity.strikes} integrity warning(s) were recorded (tab switches, pastes or code appearing without typing). This can cost you a battle and your rating.`);
 
     // ── comparison with the opponent ──────────────────────────────────────
     const o = m.opponent;

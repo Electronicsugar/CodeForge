@@ -1,5 +1,9 @@
 # CodeForge repository integration
 
+Historical integration checkpoint at `b3da123`. See
+`ROOM-LANGUAGES-AND-ENFORCEMENT-REPORT.md` for the subsequent user-requested
+penalty restoration, multilingual rooms and lint fix.
+
 ## Sources and destination
 
 - Main project: `https://github.com/Electronicsugar/CodeForge`, base `800b74d`.

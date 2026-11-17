@@ -116,6 +116,35 @@ const makeDeps = ({ llmImpl, store = [], battleDoc = battle({ status: "completed
 });
 const svc = require("../src/services/analysis/analysis.service");
 
+test('background analysis calls a provider over HTTP and retains rules fallback when it fails', async () => {
+    let failRequests = false;
+    const server = await startServer((_req, res) => failRequests
+        ? json(res, 503, {error:'test provider unavailable'})
+        : json(res, 200, {choices:[{message:{content:JSON.stringify(VALID)}}]}));
+    const env = {LLM_PROVIDER:'openai',LLM_API_KEY:'test-only',LLM_MODEL:'test-model',LLM_BASE_URL:server.url};
+    const store = [], notifications = [];
+    const deps = makeDeps({store, llmImpl:{isConfigured:()=>true,refineAnalysis:input=>llm.refineAnalysis(input,env)}});
+    deps.notify = (userId,event,payload) => notifications.push({userId,event,payload});
+    const waitFor = async count => {
+        const deadline=Date.now()+3000;
+        while(notifications.length<count && Date.now()<deadline) await new Promise(resolve=>setTimeout(resolve,10));
+        assert.equal(notifications.length,count);
+    };
+    try {
+        svc.scheduleBattleAnalysis('scheduled-success',deps,0);
+        await waitFor(2);
+        assert.equal(store.filter(row=>row.source==='llm').length,2);
+        assert.ok(notifications.every(row=>row.event==='analysis_ready'));
+        assert.ok(server.requests.every(request=>!JSON.stringify(request.body).includes('lastSubmittedCode')));
+        failRequests = true;
+        svc.scheduleBattleAnalysis('scheduled-failure',deps,0);
+        await waitFor(4);
+        const fallback = store.filter(row=>row.battle==='scheduled-failure');
+        assert.equal(fallback.length,2);
+        assert.ok(fallback.every(row=>row.source==='rules' && row.analysis.summary && /HTTP 503/.test(row.llmError)));
+    } finally {server.server.close();}
+});
+
 test("orchestration: no LLM key -> rules analysis saved; second call reuses it", async () => {
     const store = [];
     const deps = makeDeps({ llmImpl: { isConfigured: () => false }, store, subs: [{ user: "u1", ...sub(300, "wrong_answer", 1, 5) }] });

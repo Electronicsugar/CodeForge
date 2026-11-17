@@ -38,6 +38,21 @@ async function setup(context,{initial,viewer='user-a',approval=false,previewErro
   });
   return {get created(){return created;},get state(){return state;},get previewCalls(){return previewCalls;},get createCalls(){return createCalls;},approve(){requestStatus='approved';state.teams[1].members=[{user:{_id:viewer,name:'Test viewer'},ready:false}];}};
 }
+
+test('room language selector saves independent drafts and restores the selected language after refresh',async({context,page})=>{
+  await setup(context,{initial:room(1,false,true)});
+  await context.route('**/api/v1/battles/rooms/room1/problems/p1',route=>route.fulfill({json:{success:true,data:{...problem('p1'),starterCodes:{cpp:problem('p1').starterCode,python:'# python room starter',javascript:'// javascript room starter',java:'// java room starter'}}}}));
+  await page.goto('/battle/rooms/room1');
+  const language=page.getByRole('combobox',{name:'Programming language'}),editor=page.getByRole('textbox',{name:'Battle code'});
+  await expect(editor).toHaveValue(problem('p1').starterCode);
+  await editor.fill('// saved cpp room');await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await language.selectOption('python');await expect(editor).toHaveValue('# python room starter');
+  await editor.fill('print(42)');await expect(page.getByText('Saved locally',{exact:true})).toBeVisible();
+  await language.selectOption('javascript');await expect(editor).toHaveValue('// javascript room starter');
+  await language.selectOption('cpp');await expect(editor).toHaveValue('// saved cpp room');
+  await language.selectOption('python');await expect(editor).toHaveValue('print(42)');
+  await page.reload();await expect(language).toHaveValue('python');await expect(editor).toHaveValue('print(42)');
+});
 for(const size of [1,2,3,4])test(`create private ${size}v${size} with participant random difficulty selection`,async({context,page})=>{
   const fixture=await setup(context);await page.goto('/battle');
   await page.getByRole('button',{name:`${size}v${size} Up to ${size*2} players`,exact:true}).click();

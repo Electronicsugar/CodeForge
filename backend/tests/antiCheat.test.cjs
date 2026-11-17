@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const P = require("../src/services/integrity/integrity.policy");
-const cfg = P.config({ ANTICHEAT_MODE: 'enforce' }); // exercise legacy rules explicitly; runtime service is monitoring-only
+const cfg = P.config({});  // defaults: enforce, forfeit at 3 strikes
 const T0 = 1_000_000;
 
 const run = (state, steps, c = cfg) => {
@@ -73,15 +73,12 @@ test("warn on 1st and 2nd strike, forfeit on the 3rd", () => {
     assert.deepStrictEqual(out.map((o) => o.action), ["warn", "warn", "forfeit"]);
 });
 
-test("monitor mode records events without strikes, verdicts or score deductions", () => {
+test("monitor mode records strikes but never forfeits", () => {
     const monitor = P.config({ ANTICHEAT_MODE: "monitor" });
     const { state, out } = run(P.newState(), [
         [0, "paste", { length: 100 }], [10000, "paste", { length: 100 }], [20000, "paste", { length: 100 }], [30000, "paste", { length: 100 }]
     ], monitor);
-    assert.strictEqual(state.strikes, 0);
-    assert.strictEqual(state.counts.pastes, 4);
-    assert.strictEqual(P.summarize(state).score, null);
-    assert.strictEqual(P.summarize(state).label, 'recorded');
+    assert.strictEqual(state.strikes, 4);
     assert.ok(out.every((o) => o.action !== "forfeit"));
 });
 
@@ -178,7 +175,7 @@ test("finalize counts a tab that was never returned to", () => {
 });
 
 test("summary labels: clean / suspicious / flagged", () => {
-    assert.strictEqual(P.summarize(P.newState()).label, "recorded");
+    assert.strictEqual(P.summarize(P.newState()).label, "clean");
     const one = run(P.newState(), [[0, "paste", { length: 100 }]]).state;
     assert.strictEqual(P.summarize(one).label, "suspicious");
     const three = run(P.newState(), [0, 10000, 20000].map((t) => [t, "paste", { length: 100 }])).state;

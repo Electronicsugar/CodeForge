@@ -14,7 +14,7 @@
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 const config = (env = process.env) => ({
-    mode: env.ANTICHEAT_MODE === "enforce" ? "enforce" : "monitor",
+    mode: env.ANTICHEAT_MODE === "monitor" ? "monitor" : "enforce",
     forfeitStrikes: num(env.ANTICHEAT_FORFEIT_STRIKES, 3),   // 0 disables forfeits
     tabAwayMinMs: num(env.ANTICHEAT_TAB_AWAY_MS, 3000),      // shorter absences are free
     pasteMinChars: num(env.ANTICHEAT_PASTE_MIN_CHARS, 25),   // smaller pastes are free
@@ -34,7 +34,6 @@ const EVENT_TYPES = [
 ];
 
 const newState = () => ({
-    monitorOnly: true,
     strikes: 0,
     lastStrikeAt: 0,
     hiddenSince: null,       // tab hidden
@@ -54,11 +53,6 @@ const cloneState = (s) => ({ ...s, recent: [...s.recent], flags: [...s.flags], c
 // Awards a strike unless one was just given (tab_hidden and window_blur arrive
 // together when switching tabs; that is one act, not two).
 const strike = (state, reason, now, cfg) => {
-    if (cfg.mode === 'monitor') {
-        state.monitorOnly = true;
-        return { awarded: false, reason };
-    }
-    state.monitorOnly = false;
     if (state.lastStrikeAt && now - state.lastStrikeAt < cfg.strikeCooldownMs) {
         return { awarded: false, reason };
     }
@@ -207,7 +201,6 @@ const finalize = (prev, now) => {
 
 const summarize = (state) => {
     const c = state.counts;
-    if (state.monitorOnly) return { strikes: 0, score: null, label: 'recorded', awayMs: state.awayMs, counts: { ...c }, flags: [...new Set(state.flags)] };
     const score = Math.max(0, 100 - state.strikes * 20 - c.unreportedJumps * 15 - c.submitWithoutSync * 5 - Math.min(10, c.smallPastes * 2));
     const label = state.strikes === 0 && c.unreportedJumps === 0 ? (score >= 90 ? "clean" : "minor")
         : state.strikes >= 3 || c.unreportedJumps >= 2 ? "flagged" : "suspicious";

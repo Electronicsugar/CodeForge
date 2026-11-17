@@ -22,9 +22,30 @@ async function open(browser,userId,options={}){
   const context=await browser.newContext();await context.addInitScript(id=>localStorage.setItem('token',`test.${btoa(JSON.stringify({id}))}.signature`),userId);
   await context.route('**/api/v1/users/me',route=>route.fulfill({json:{data:{_id:userId,name:userId}}}));await context.route('**/api/v1/battles/rooms/*/behaviour',route=>{metrics.push(...route.request().postDataJSON().windows);return route.fulfill({json:{success:true,data:{accepted:1}}});});await context.route('**/health',route=>route.fulfill({json:{status:'ok'}}));
   await context.route('**/src/services/socket.js',async route=>{const response=await route.fetch();await route.fulfill({response,body:(await response.text()).replace('http://localhost:3000',url)});});
-  const page=await context.newPage();await page.goto('/login');await page.evaluate(async identity=>{if(identity.backup){const {writeDraft,draftKey}=await import('/src/services/draftStorage.js');await writeDraft(draftKey({userId:identity.userId,context:`battle-collaborative-team:${identity.teamId||'alpha'}`,battleId:'room',problemId:identity.problemId||'problem1',language:'cpp'}),identity.backup,0,'test-backup');}const {mount}=await import('/tests/browser/collaborationHarness.jsx');mount(identity);},{userId,...options});await expect(page.getByRole('textbox',{name:'Shared battle code'})).toBeVisible({timeout:25000});return {context,page,metrics};
+  const page=await context.newPage();await page.goto('/tests/browser/collaboration.html',{waitUntil:'load',timeout:15000});await page.waitForFunction(()=>Boolean(window.mountCollaborationTest),null,{timeout:15000});await page.evaluate(async identity=>{if(identity.backup){const {writeDraft,draftKey}=await import('/src/services/draftStorage.js');await writeDraft(draftKey({userId:identity.userId,context:`battle-collaborative-team:${identity.teamId||'alpha'}`,battleId:'room',problemId:identity.problemId||'problem1',language:identity.language||'cpp'}),identity.backup,0,'test-backup');}const {mount}=await import('/tests/browser/collaborationHarness.jsx');mount(identity);},{userId,...options});await expect(page.getByRole('textbox',{name:'Shared battle code'})).toBeVisible({timeout:25000});return {context,page,metrics};
 }
 const code=page=>page.evaluate(()=>window.collaborationCode);
+
+test('Python, JavaScript and Java teammates share language-specific documents without touching C++',async({browser})=>{
+  test.setTimeout(120000);
+  const cpp=await open(browser,'cpp-control',{problemId:'multi-language',language:'cpp'});
+  try{
+    for(const language of ['python','javascript','java']){
+      const a=await open(browser,`${language}-one`,{problemId:'multi-language',language});
+      const b=await open(browser,`${language}-two`,{problemId:'multi-language',language});
+      try{
+        await a.page.locator('.monaco-editor').click({position:{x:90,y:35},timeout:5000});
+        await a.page.keyboard.type(`${language.toUpperCase()}_LOCAL`);
+        await expect.poll(()=>code(b.page)).toContain(`${language.toUpperCase()}_LOCAL`);
+        expect(await code(cpp.page)).not.toContain(`${language.toUpperCase()}_LOCAL`);
+        expect(await a.page.evaluate(()=>JSON.parse(window.collaborationProvider.key)[3])).toBe(language);
+        await a.page.evaluate(()=>window.collaborationProvider.flushAnalytics());
+        expect(a.metrics.length).toBeGreaterThan(0);
+        expect(a.metrics.every(window=>window.language===language)).toBe(true);
+      }finally{await a.context.close();await b.context.close();}
+    }
+  }finally{await cpp.context.close();}
+});
 test('Monaco typing synchronizes three teammates and displays collaborator presence/cursors',async({browser})=>{
   const a=await open(browser,'one'),b=await open(browser,'two'),c=await open(browser,'three');
   try{

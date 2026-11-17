@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { getProblemById, updateProblem, deleteProblem } from "../services/problemService";
@@ -55,26 +55,8 @@ function EditProblem() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingProblem, setDeletingProblem] = useState(false);
 
-  /* ── Auth Guard ── */
-  if (user && user.role !== "admin") {
-    return (
-      <div className="cp-page">
-        <Navbar />
-        <div className="cp-unauthorized">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="unauth-icon-svg">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0110 0v4"/>
-          </svg>
-          <h2>Admin Access Required</h2>
-          <p>You must be an administrator to edit problems and manage test cases.</p>
-          <button onClick={() => navigate("/problems")}>Back to Problems</button>
-        </div>
-      </div>
-    );
-  }
-
   /* ── Load Problem and Testcases ── */
-  const loadProblemData = async () => {
+  const loadProblemData = useCallback(async () => {
     setPageLoading(true);
     setPageError("");
     try {
@@ -104,9 +86,9 @@ function EditProblem() {
     } finally {
       setPageLoading(false);
     }
-  };
+  }, [id]);
 
-  const loadTestCases = async () => {
+  const loadTestCases = useCallback(async () => {
     setLoadingTestCases(true);
     try {
       const res = await getTestCasesByProblem(id);
@@ -116,14 +98,32 @@ function EditProblem() {
     } finally {
       setLoadingTestCases(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    if (id) {
+    if (id && user?.role === "admin") {
       loadProblemData();
       loadTestCases();
     }
-  }, [id]);
+  }, [id, user?.role, loadProblemData, loadTestCases]);
+
+  /* ── Auth Guard ── */
+  if (user && user.role !== "admin") {
+    return (
+      <div className="cp-page">
+        <Navbar />
+        <div className="cp-unauthorized">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="unauth-icon-svg">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          <h2>Admin Access Required</h2>
+          <p>You must be an administrator to edit problems and manage test cases.</p>
+          <button onClick={() => navigate("/problems")}>Back to Problems</button>
+        </div>
+      </div>
+    );
+  }
 
   /* ── Parameter Helpers ── */
   const addParam = () => setParameters([...parameters, { ...BLANK_PARAM }]);
@@ -195,7 +195,7 @@ function EditProblem() {
 
     setSavingProblem(true);
     try {
-      const res = await updateProblem(id, payload);
+      await updateProblem(id, payload);
       setProblemMsg({ text: "Problem updated successfully!", type: "success" });
       setTimeout(() => setProblemMsg({ text: "", type: "" }), 3000);
     } catch (err) {

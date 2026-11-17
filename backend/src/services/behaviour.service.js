@@ -3,12 +3,13 @@ const Actions=require('../models/BehaviourAction');
 const Submission=require('../models/Submission');
 const rooms=require('./battleRoom.service');
 const {identity}=require('./collaborativeDocument.service');
+const {isSupported}=require('./executor/languages');
 const fields=Windows.metricFields,retentionMs=30*86400000;
 const fail=(status,message)=>Object.assign(Error(message),{status});
 async function access(roomId,user){const room=await rooms.expire(await rooms.load(roomId)),member=rooms.membership(room,user);if(!member.member)throw fail(403,'Behavioural profiles are private to their participant');return {room,team:member.team};}
 function validateWindow(window,room){
   if(!window||Object.keys(window).some(key=>!['problemId','language','sessionId','minute','sequence','metrics','firstEditAt','lastEditAt','firstPasteAt','lastPasteAt'].includes(key)))throw fail(400,'Only aggregate editor metrics are accepted');
-  if(window.language!=='cpp'||!room.problems.some(problem=>String(problem)===window.problemId))throw fail(403,'Metrics must belong to a selected room problem');
+  if(!isSupported(window.language)||!room.problems.some(problem=>String(problem)===window.problemId))throw fail(403,'Metrics must belong to a selected room problem and supported language');
   if(typeof window.sessionId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(window.sessionId)||!Number.isSafeInteger(window.sequence)||window.sequence<1||window.sequence>1000000)throw fail(400,'Invalid metric window identity');
   const start=+new Date(room.startTime),end=+new Date(room.endTime);
   if(!start||!end||!Number.isSafeInteger(window.minute)||window.minute%60000!==0||window.minute<Math.floor(start/60000)*60000||window.minute>Math.floor(Math.min(Date.now()+10000,end)/60000)*60000)throw fail(400,'Metric window falls outside this battle');
@@ -24,14 +25,14 @@ async function ingest(roomId,user,windows){
   const {room,team}=await access(roomId,user);if(!room.endTime||Date.now()>+new Date(room.endTime)+86400000)throw fail(409,'The metrics upload period has ended');
   const prepared=windows.map(window=>({window,...validateWindow(window,room)}));
   for(const {window,metrics,dates} of prepared){
-    const key={user,documentKey:identity(room._id,team._id,window.problemId),sessionId:window.sessionId,minute:window.minute};
+    const key={user,documentKey:identity(room._id,team._id,window.problemId,window.language),sessionId:window.sessionId,minute:window.minute};
     let saved=false;
     for(let retry=0;retry<8;retry++){
       const existing=await Windows.findOne(key).lean();if(existing&&existing.sequence>=window.sequence){saved=true;break;}
       if(existing&&fields.some(field=>metrics[field]<(existing.metrics[field]||0)))throw fail(409,'Cumulative metrics cannot decrease');
       if(!existing&&await Windows.countDocuments({room:room._id,user})>=10000)throw fail(429,'Battle analytics storage limit reached');
       try{
-        const result=await Windows.findOneAndUpdate({...key,...(existing?{sequence:existing.sequence}:{sequence:{$exists:false}})},{$set:{room:room._id,teamId:team._id,problem:window.problemId,language:'cpp',sequence:window.sequence,metrics,...dates,expiresAt:new Date(+new Date(room.endTime)+retentionMs)}},{upsert:!existing,returnDocument:'after'}).lean();
+        const result=await Windows.findOneAndUpdate({...key,...(existing?{sequence:existing.sequence}:{sequence:{$exists:false}})},{$set:{room:room._id,teamId:team._id,problem:window.problemId,language:window.language,sequence:window.sequence,metrics,...dates,expiresAt:new Date(+new Date(room.endTime)+retentionMs)}},{upsert:!existing,returnDocument:'after'}).lean();
         if(result){saved=true;break;}
       }catch(error){if(error.code!==11000)throw error;}
     }

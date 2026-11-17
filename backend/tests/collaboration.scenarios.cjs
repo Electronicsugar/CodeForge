@@ -13,7 +13,7 @@ module.exports=async({t,mongoose,problem,userId,io,until})=>{
   const peers=[],docs=[];
   const connect=async user=>{const token=require('jsonwebtoken').sign({id:user},process.env.JWT_SECRET),socket=require('socket.io-client').io(`http://127.0.0.1:${io.httpServer.address().port}`,{auth:{token},transports:['websocket'],reconnection:false});await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('connect_error',reject);});peers.push(socket);return socket;};
   const ack=(socket,event,body)=>new Promise((resolve,reject)=>{socket.timeout(4000).emit(event,body,(error,result)=>error?reject(error):resolve(result));});
-  const join=async(socket,team=0,doc=new Y.Doc())=>{docs.push(doc);const response=await ack(socket,'collab_join',{roomId,teamId:String(room.teams[team]._id),problemId:String(problem._id),language:'cpp',clientId:doc.clientID});assert.equal(response.success,true,response.message);Y.applyUpdate(doc,new Uint8Array(response.update));socket.on('collab_update',packet=>{if(packet.key===response.key)Y.applyUpdate(doc,new Uint8Array(packet.update));});return {socket,doc,key:response.key};};
+  const join=async(socket,team=0,doc=new Y.Doc(),language='cpp')=>{docs.push(doc);const response=await ack(socket,'collab_join',{roomId,teamId:String(room.teams[team]._id),problemId:String(problem._id),language,clientId:doc.clientID});assert.equal(response.success,true,response.message);Y.applyUpdate(doc,new Uint8Array(response.update));socket.on('collab_update',packet=>{if(packet.key===response.key)Y.applyUpdate(doc,new Uint8Array(packet.update));});return {socket,doc,key:response.key};};
   const send=client=>ack(client.socket,'collab_update',{key:client.key,update:Y.encodeStateAsUpdate(client.doc)});
   try{
     const a=await join(await connect(users[0])),b=await join(await connect(users[1])),c=await join(await connect(users[2])),beta=await join(await connect(users[3]),1);
@@ -25,7 +25,7 @@ module.exports=async({t,mongoose,problem,userId,io,until})=>{
       const response=await ack(beta.socket,'collab_join',{roomId,teamId:String(room.teams[0]._id),problemId:String(problem._id),language:'cpp',clientId:beta.doc.clientID});assert.equal(response.status,403);
       assert.equal((await ack(beta.socket,'collab_update',{key:a.key,update:Y.encodeStateAsUpdate(beta.doc)})).status,403);
       for(const user of [users[4],userId]){const socket=await connect(user);const denied=await ack(socket,'collab_join',{roomId,problemId:String(problem._id),language:'cpp',clientId:123});assert.equal(denied.status,403);assert.equal(denied.update,undefined);assert.equal((await ack(socket,'collab_update',{key:a.key,update:Y.encodeStateAsUpdate(a.doc)})).status,403);}
-      assert.equal((await ack(a.socket,'collab_join',{roomId,problemId:String(problem._id),language:'javascript',clientId:a.doc.clientID})).status,400);
+      assert.equal((await ack(a.socket,'collab_join',{roomId,problemId:String(problem._id),language:'ruby',clientId:a.doc.clientID})).status,400);
       assert.equal((await ack(a.socket,'collab_join',{roomId,problemId:String(new mongoose.Types.ObjectId()),language:'cpp',clientId:a.doc.clientID})).status,403);
     });
     await t.test('awareness is team-only and identities are assigned by the server',async()=>{
@@ -44,6 +44,7 @@ module.exports=async({t,mongoose,problem,userId,io,until})=>{
       a.socket.connect();await new Promise((resolve,reject)=>{a.socket.once('connect',resolve);a.socket.once('connect_error',reject);});const response=await ack(a.socket,'collab_join',{roomId,problemId:String(problem._id),language:'cpp',clientId:a.doc.clientID});Y.applyUpdate(a.doc,new Uint8Array(response.update));assert.equal((await send(a)).success,true);await until(()=>b.doc.getText('source').toString().includes('OFFLINE-A'));assert.ok(a.doc.getText('source').toString().includes('ONLINE-B'));
     });
     await require('./collaborationCompletion.scenarios.cjs')({t,mongoose,problem,room,users,userId,io,until,a,b,c,send});
+    await require('./collaborativeLanguages.scenarios.cjs')({t,mongoose,room,problem,users,join,send,connect,ack,until,io});
     await t.test('revoked recipients stop receiving source and expired rooms reject edits',async()=>{
       const {redisClient}=require('../src/config/redis');const key=`blacklist:${a.socket.auth.token}`;await redisClient.set(key,'1');
       let count=0;a.socket.on('collab_update',()=>count++);b.doc.getText('source').insert(0,'AFTER-REVOCATION');await send(b);assert.equal(count,0);await redisClient.del(key);

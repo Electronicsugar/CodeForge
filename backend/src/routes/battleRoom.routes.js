@@ -19,7 +19,7 @@ router.post('/',limit('room creation'),handle(async req=>{const room=await servi
 router.post('/preview',limit('room preview'),handle(req=>service.preview(req.user.id,req.body.code)));
 router.post('/join',limit('room joining'),handle(async req=>{const room=await service.join(req.user.id,req.body.code,req.body.teamId);return room.pending?room:service.view(room._id.toString(),req.user.id);}));
 router.get('/:roomId',handle(req=>service.view(req.params.roomId,req.user.id)));
-router.get('/:roomId/problems/:problemId',handle(async req=>(await service.selectedProblem(req.params.roomId,req.user.id,req.params.problemId)).problem));
+router.get('/:roomId/problems/:problemId',handle(async req=>require('../services/executor/starter-generator').withStarterCodes((await service.selectedProblem(req.params.roomId,req.user.id,req.params.problemId)).problem)));
 for(const operation of ['configure','team','ready','reset-ready','start','cancel','leave','lead','policy','team-ready','admission']){
   router.post(`/:roomId/${operation}`,limit(`room ${operation}`),handle(async req=>{
     const room=await service.change(req.params.roomId,req.user.id,operation,req.body);

@@ -50,11 +50,6 @@ const createSubmission = async (submissionData, userId) => {
     if (!isSupported(submissionData.language)) {
         throw failure(400, `Unsupported language. Supported: ${SUPPORTED.join(", ")}`);
     }
-    // Battle rooms (1v1–4v4 with the shared Yjs editor and behaviour analytics)
-    // are still C++-only; reject early instead of failing inside the judge.
-    if (submissionData.roomId && submissionData.language !== "cpp") {
-        throw failure(400, "Battle rooms currently support C++ only");
-    }
     let submission;
     try { submission = await submissionRepository.create({
         operation, ...(key ? {idempotencyKey:key,payloadHash}:{}),enqueueState:'waiting',

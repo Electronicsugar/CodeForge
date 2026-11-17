@@ -24,25 +24,21 @@ const socketFor = (id) => { const emitted = []; return { user: { id }, emitted, 
 const send = (s, type, meta, battleId = "b1") => service.handleEvent(null, s, { battleId, type, meta });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-test("big paste is persisted as neutral analytics without warnings or penalties", async () => {
+test("big paste -> persisted + warning emitted to the offender only", async () => {
     reset(); const alice = socketFor("alice"), bob = socketFor("bob");
     await send(alice, "paste", { length: 500 });
     const w = alice.emitted.find((e) => e[0] === "integrity_warning");
-    assert.strictEqual(w, undefined);
+    assert.ok(w, "alice gets a warning");
+    assert.strictEqual(w[1].strikes, 1);
+    assert.strictEqual(w[1].maxStrikes, 3);
     assert.strictEqual(bob.emitted.length, 0);
-    const saved = db.updates.find((u) => u.$set && u.$set["player1.integrity.counts"]?.pastes === 1);
-    assert.ok(saved, "paste count written to player1.integrity");
-    assert.strictEqual(saved.$set['player1.integrity.strikes'], 0);
-    assert.strictEqual(saved.$set['player1.integrity.score'], null);
-    assert.strictEqual(saved.$set['player1.integrity.label'], 'recorded');
+    const saved = db.updates.find((u) => u.$set && u.$set["player1.integrity.strikes"] === 1);
+    assert.ok(saved, "strike written to player1.integrity");
     assert.ok(!JSON.stringify(db.updates).includes("secret"), "no clipboard content stored");
     await service.finalizeBattle("b1").catch(() => {});
 });
 
-test("repeated large pastes never forfeit the battle even with enforcement configured", async () => {
-    const previous = process.env.ANTICHEAT_MODE;
-    process.env.ANTICHEAT_MODE = 'enforce';
-    try {
+test("three strikes forfeit the battle in favour of the opponent", async () => {
     reset(); const alice = socketFor("alice");
     await send(alice, "paste", { length: 500 });
     await wait(2600);                       // outside the 2.5s cooldown
@@ -50,12 +46,7 @@ test("repeated large pastes never forfeit the battle even with enforcement confi
     await wait(2600);
     assert.strictEqual(db.forfeits.length, 0);
     await send(alice, "paste", { length: 500 });
-    assert.deepStrictEqual(db.forfeits, []);
-    assert.strictEqual(db.battle.status, 'in_progress');
-    } finally {
-        if (previous === undefined) delete process.env.ANTICHEAT_MODE;
-        else process.env.ANTICHEAT_MODE = previous;
-    }
+    assert.deepStrictEqual(db.forfeits, [{ id: "b1", winner: "bob", reason: "cheating" }]);
 });
 
 test("outsiders cannot report events for someone else's battle", async () => {
@@ -77,9 +68,7 @@ test("server-side jump check fires through handleSync with no client report", as
     await service.handleSync(null, alice, { battleId: "b-sync", codeLength: 50, language: "cpp" });
     await service.handleSync(null, alice, { battleId: "b-sync", codeLength: 900, language: "cpp" });
     const w = alice.emitted.find((e) => e[0] === "integrity_warning");
-    assert.strictEqual(w, undefined);
-    assert.ok(db.updates.some(u => u.$set?.['player1.integrity.counts']?.unreportedJumps === 1));
-    assert.strictEqual(db.forfeits.length, 0);
+    assert.ok(w && w[1].reason === "unreported_jump");
 });
 
 test("unknown event types never reach storage", async () => {

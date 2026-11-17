@@ -71,6 +71,7 @@ class MemoryDocumentStore{
 }
 const store=new DocumentStore();
 async function submissionSnapshot(data,userId){
+  if(!require('./executor/languages').isSupported(data.language))throw failure(400,'Unsupported document language');
   const {room,access}=await require('./battleRoom.service').selectedProblem(data.roomId,userId,String(data.problem),true);
   const key=identity(room._id,access.team._id,data.problem,data.language);
   const shared=room.editorMode==='collaborative'||data.collaborative===true||await store.exists(key);

@@ -9,7 +9,7 @@
 * Starter code for every language is generated from `judgeConfig` (`starter-generator.js`), so existing problems work
   immediately. An optional `starterCodes.{cpp,python,javascript,java}` on a problem overrides the generated one.
 * New supported parameter/return type: `vector<vector<int>>` (grids, matrices) in all four languages.
-* Battle **rooms** (1v1–4v4 shared editor) remain C++-only; the API rejects other languages there with a clear message.
+* Collaborative battle rooms support C++, Python, JavaScript and Java. Each room/team/problem/language has a separate durable Yjs document, local backup and analytics identity. Teammates selecting the same language edit together.
 * Docker is required by default; missing Docker or a missing runner image fails closed.
   Explicit development-only direct mode uses a scrubbed environment (server secrets such as
   `JWT_SECRET`/`MONGO_URI` are not visible to submitted code), process-group kill on timeout, capped output and
@@ -21,31 +21,17 @@
 
 ## 2. Anti-cheat
 
-| Signal | Where | Integrated behavior |
-|---|---|---|
-| Tab hidden > 3 s (measured by the **server**) | `visibilitychange` | duration recorded |
-| Window unfocused > 3 s | `blur`/`focus` | duration recorded |
-| Paste >= 25 chars | `paste` (length only, never content) | count and length recorded |
-| Non-paste insert >= 80 chars (drag-drop, autofill) | editor change | large insertion recorded |
-| Code-length jump with no reported paste | check on `code_sync` | approximate growth event recorded |
-| Submitted length differs from what was synced | on submit | synchronization observation recorded |
-| Copy/cut, context menu | | logged only |
+The colleague's original legacy 1v1 battle penalties are restored, as requested:
+large paste, large insertion, unexplained code growth and sufficiently long
+focus/tab absences can award strikes. The default third strike forfeits the
+legacy battle under the original rules. Existing threshold environment options
+and explicit monitor mode remain available. Clipboard contents are not stored or
+transmitted, and paste/copy events outside the editor are ignored.
 
-Integration policy override: the runtime service is monitoring-only. Paste, large
-insertion and timing events do not award strikes, deduct scores, produce cheating
-verdicts, forfeit matches or change ratings. The original repository's enforcement
-rules remain as pure-policy test fixtures; the runtime service does not use them.
-Existing tab-ownership restrictions remain separate.
-Event thresholds can be tuned with env vars; runtime monitoring cannot enable forfeits:
-`ANTICHEAT_MODE=monitor`, `ANTICHEAT_FORFEIT_STRIKES` (ignored by runtime),
-`ANTICHEAT_TAB_AWAY_MS`, `ANTICHEAT_PASTE_MIN_CHARS`, `ANTICHEAT_LARGE_INSERT_CHARS`, `ANTICHEAT_JUMP_CHARS`, `ANTICHEAT_MAX_CPS`.
-
-Contests use the same rules in **record-only** mode: `POST /api/contests/:id/integrity` (participants),
-`GET /api/contests/:id/integrity` (admin report). Nobody is disqualified automatically.
-
-These are approximate interaction observations, not proof of cheating. Client
-signals and reported code lengths can be bypassed or falsified; the server cannot
-observe activity on another device or reliably infer how code was produced.
+Contests remain record-only. Collaborative team-room behavioural analytics remain
+separate from legacy battle penalties: this update does not introduce team
+forfeits or team scoring rules. Browser interaction signals can be bypassed and
+are not reliable proof of cheating.
 
 ## 3. AI post-battle review and long-term coach
 

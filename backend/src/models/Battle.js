@@ -3,8 +3,8 @@ const mongoose = require("mongoose");
 const integritySchema = new mongoose.Schema(
     {
         strikes: { type: Number, default: 0 },
-        score: { type: Number, default: null },
-        label: { type: String, enum: ["recorded", "clean", "minor", "suspicious", "flagged"], default: "recorded" },
+        score: { type: Number, default: 100 },
+        label: { type: String, enum: ["clean", "minor", "suspicious", "flagged"], default: "clean" },
         awayMs: { type: Number, default: 0 },
         counts: { type: mongoose.Schema.Types.Mixed, default: {} },
         flags: [String],

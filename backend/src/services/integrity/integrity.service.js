@@ -1,12 +1,10 @@
 // Stateful wrapper around the pure rules in integrity.policy.js:
-// keeps per-player interaction summaries and persists them on the Battle.
-// Runtime monitoring does not issue penalties or forfeit matches.
+// keeps per-player state, persists it on the Battle, tells the player about
+// warnings and forfeits the battle on the final strike.
 const Battle = require("../../models/Battle");
 const policy = require("./integrity.policy");
 
-// Interaction patterns are analytics, never grounds for an automatic penalty.
-// Preserve the existing battle system's separate tab-ownership rules.
-const cfg = () => ({ ...policy.config(), mode: 'monitor', forfeitStrikes: 0 });
+const cfg = () => policy.config();
 const contexts = new Map(); // `${battleId}:${userId}` -> ctx
 const SAMPLE_EVERY_MS = 10000;
 const MAX_SAMPLES = 240;       // ~40 min at one sample / 10 s
@@ -74,6 +72,11 @@ const persist = async (ctx, record) => {
     await Battle.updateOne({ _id: ctx.battleId }, update);
 };
 
+const forfeit = async (ctx) => {
+    const battleResultService = require("../battleResult.service");
+    await battleResultService.finishBattle(ctx.battleId, ctx.opponentId, "cheating");
+};
+
 // Applies a pure-policy result to ctx, persists, notifies, enforces.
 const settle = async (io, socket, ctx, result) => {
     ctx.state = result.state;
@@ -91,6 +94,7 @@ const settle = async (io, socket, ctx, result) => {
             action: result.action
         });
     }
+    if (result.action === "forfeit") await forfeit(ctx);
 };
 
 const guardActive = (ctx) => ctx.status === "in_progress";
