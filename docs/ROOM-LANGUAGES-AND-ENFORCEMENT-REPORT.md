@@ -34,10 +34,18 @@ monitoring-only override, C++-only room limitation and unresolved hook lint erro
 
 ## AI and rule-based coaching
 
-No live provider credentials are configured. The user indicated that they do not
-know which provider to use; no account, paid plan, API key or external provider was
-created or selected on their behalf. A real external-provider/model test remains
-pending until credentials are connected locally.
+After the replacement key was saved locally, a live Gemini test using
+`gemini-3.8-flash` through Google's OpenAI-compatible endpoint returned a valid
+post-battle coaching response. Only synthetic metrics were sent; source-code
+sharing remained disabled. The API key was read from the ignored backend `.env`
+without printing or committing it.
+
+A separate live personal-coach request timed out at the default 25-second limit,
+then timed out again with a process-only 60-second test timeout. Live personal
+coaching is therefore not verified as working; its rule-based fallback remains
+covered by passing tests. No provider account, billing setting, model substitution
+or permanent timeout change was made. The earlier missing-credentials blocker is
+resolved, but this live-provider timeout is an outstanding limitation.
 
 The scheduled background analysis was exercised over real HTTP against a local
 provider fixture, covering valid model responses, per-participant persistence,
