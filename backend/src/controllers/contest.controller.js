@@ -110,6 +110,32 @@ const calculateContestRatings = async (req, res) => {
     }
 };
 
+// Anti-cheat: participants report tab switches / pastes; organisers read the report.
+// Contests record only - they never auto-disqualify.
+const reportIntegrityEvent = async (req, res) => {
+    try {
+        const { type, meta, problemId } = req.body || {};
+        const result = await require("../services/integrity/integrity.service")
+            .handleContestEvent(req.user.id, req.params.contestId, { type, meta, problemId });
+        return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        return res.status(error.status || error.statusCode || 500).json({
+            success: false,
+            message: error.message || "Internal Server Error"
+        });
+    }
+};
+
+const getIntegrityReport = async (req, res) => {
+    try {
+        const data = await require("../services/integrity/integrity.service").contestReport(req.params.contestId);
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        return res.status(error.status || 500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
-    createContest, getAllContests, getContestById, joinContest, getContestStatus, getContestProblems, calculateContestRatings
+    createContest, getAllContests, getContestById, joinContest, getContestStatus, getContestProblems, calculateContestRatings,
+    reportIntegrityEvent, getIntegrityReport
 };

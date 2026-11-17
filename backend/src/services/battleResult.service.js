@@ -3,6 +3,16 @@ const battleRepository = require("../repositories/battle.repository");
 const { calculateElo } = require("./elo.service");
 const { getIO } = require("../sockets/socketManager");
 
+// Post-battle bookkeeping that must never break or delay the result itself.
+const afterBattle = (battleId) => {
+    setImmediate(async () => {
+        try { await require("./integrity/integrity.service").finalizeBattle(battleId); }
+        catch (e) { console.error("[integrity] finalize failed:", e.message); }
+        try { require("./analysis/analysis.service").scheduleBattleAnalysis(battleId); }
+        catch (e) { console.error("[analysis] schedule failed:", e.message); }
+    });
+};
+
 const finishBattle = async (battleId, winnerId, reason = "accepted") => {
 
     const battle = await battleRepository.findBattleById(battleId);
@@ -95,6 +105,7 @@ const finishBattle = async (battleId, winnerId, reason = "accepted") => {
         console.error("Socket emit battle_ended error:", socketErr.message);
     }
     
+    afterBattle(battleId);
     return updatedBattle;
 };
 
@@ -175,6 +186,7 @@ const finishBattleDraw = async (battleId, reason = "draw") => {
         console.error("Socket emit battle_ended error:", socketErr.message);
     }
 
+    afterBattle(battleId);
     return updatedBattle;
 };
 

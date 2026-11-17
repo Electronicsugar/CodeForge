@@ -6,6 +6,9 @@ const { deleteCache } = require("../utils/cache");
 
 const { getExecutor } = require("./executor/executor.factory");
 const { generateCode } = require("./executor/code-generator");
+const { isSupported, SUPPORTED } = require("./executor/languages");
+
+const normalizeOutput = (text) => String(text ?? "").replace(/\r\n/g, "\n").trim();
 
 const judgeSubmission = async (submissionId, userId) => {
 
@@ -39,11 +42,17 @@ const judgeSubmission = async (submissionId, userId) => {
         status: "running", totalTests: testCases.length, passedTests: 0, error: null
     });
 
-    const executableCode = generateCode(problem, submission.code);
+    const executableCode = generateCode(problem, submission.code, submission.language);
 
     const executor = getExecutor(submission.language);
 
-    const result = await executor(executableCode, testCases);
+    // The loop below stops at the first failing test, so tell the runner to stop
+    // there too instead of burning CPU on tests whose results are discarded.
+    const result = await executor(executableCode, testCases, {
+        isFailure: (testResult, testCase) =>
+            testResult.status !== "success" ||
+            normalizeOutput(testResult.output) !== normalizeOutput(testCase.expectedOutput)
+    });
 
     let passedTests = 0;
     let totalRuntime = 0;
@@ -87,8 +96,8 @@ const judgeSubmission = async (submissionId, userId) => {
             break;
         }
 
-        const actualOutput = testResult.output.trim();
-        const expectedOutput = testCase.expectedOutput.trim();
+        const actualOutput = normalizeOutput(testResult.output);
+        const expectedOutput = normalizeOutput(testCase.expectedOutput);
 
         if (actualOutput !== expectedOutput) {
 
@@ -177,8 +186,11 @@ const runCode = async (problemId, language, code, {visibleOnly=false}={}) => {
         throw new Error("Problem not found");
     }
 
-    if (language !== "cpp") {
-        throw new Error("Only C++ is supported currently");
+    if (!isSupported(language)) {
+        throw Object.assign(
+            new Error(`Unsupported language. Supported: ${SUPPORTED.join(", ")}`),
+            { status: 400 }
+        );
     }
 
     const allTestCases = await testcaseRepository.findByProblem(problemId);
@@ -191,7 +203,7 @@ const runCode = async (problemId, language, code, {visibleOnly=false}={}) => {
     if(visibleOnly&&!visibleTestCases.length)throw Object.assign(new Error('No public test cases are available. Submit code to run private tests.'),{status:409});
     const testCasesToRun = visibleTestCases.length > 0 ? visibleTestCases : allTestCases.slice(0, 3);
 
-    const executableCode = generateCode(problem, code);
+    const executableCode = generateCode(problem, code, language);
     const executor = getExecutor(language);
 
     const result = await executor(executableCode, testCasesToRun);
@@ -229,8 +241,8 @@ const runCode = async (problemId, language, code, {visibleOnly=false}={}) => {
             continue;
         }
 
-        const actualOutput = (testResult.output || "").trim();
-        const expectedOutput = (testCase.expectedOutput || "").trim();
+        const actualOutput = normalizeOutput(testResult.output);
+        const expectedOutput = normalizeOutput(testCase.expectedOutput);
 
         if (actualOutput !== expectedOutput) {
             if (overallStatus === "accepted") {

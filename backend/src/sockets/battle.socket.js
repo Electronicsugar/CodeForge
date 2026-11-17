@@ -3,6 +3,9 @@ const battleService = require("../services/battle.service");
 const battleRepository = require("../repositories/battle.repository");
 const submissionService = require("../services/submission.service");
 const battleResultService = require("../services/battleResult.service");
+const { withStarterCodes } = require("../services/executor/starter-generator");
+const { isSupported } = require("../services/executor/languages");
+const integrity = require("../services/integrity/integrity.service");
 
 // Maps to track active timers
 const battleTimers = new Map(); // battleId -> timeoutId
@@ -58,7 +61,7 @@ const registerBattleSocket = (io, socket) => {
             io.to(roomId).emit("match_found", {
                 battleId: battle._id,
                 roomId,
-                problem: populatedBattle.problem,
+                problem: withStarterCodes(populatedBattle.problem),
                 player1: populatedBattle.player1,
                 player2: populatedBattle.player2,
                 duration: battle.duration
@@ -122,13 +125,22 @@ const registerBattleSocket = (io, socket) => {
     });
 
     // 4. REAL-TIME CODE SYNC / TYPING STATUS
-    socket.on("code_sync", async ({ battleId, codeLength, linesCount }) => {
+    socket.on("code_sync", async ({ battleId, codeLength, linesCount, language }) => {
         try { await battleService.getPlayerNumber(battleId, socket.user.id); } catch { return; }
         const roomId = `battle:${battleId}`;
         socket.to(roomId).emit("opponent_code_sync", {
             battleId,
             codeLength, linesCount
         });
+        // server-side anti-cheat check + behaviour sampling (never blocks the sync)
+        integrity.handleSync(io, socket, { battleId, codeLength, language })
+            .catch((e) => console.error("[integrity] sync:", e.message));
+    });
+
+    // 4b. ANTI-CHEAT: client-reported integrity events (tab switch, paste, ...)
+    socket.on("integrity_event", (data) => {
+        integrity.handleEvent(io, socket, data)
+            .catch((e) => console.error("[integrity] event:", e.message));
     });
 
     // 5. submit battle code
@@ -136,6 +148,11 @@ const registerBattleSocket = (io, socket) => {
         try {
             const { battleId, code, language = "cpp", idempotencyKey } = data;
             const userId = socket.user.id;
+
+            if (!isSupported(language)) {
+                socket.emit("battle_error", { message: "Unsupported language" });
+                return;
+            }
 
             const battle = await battleRepository.findBattleById(battleId);
             if (!battle) {
@@ -156,6 +173,8 @@ const registerBattleSocket = (io, socket) => {
                 code,
                 battleId, idempotencyKey
             }, userId);
+
+            integrity.handleSubmit(io, socket, { battleId, codeLength: typeof code === "string" ? code.length : 0 });
 
             socket.emit("battle_submission_queued", {
                 battleId,

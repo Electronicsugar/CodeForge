@@ -133,6 +133,13 @@ const runCode = async (req, res) => {
 
         const result = await judgeService.runCode(problem, language, code,{visibleOnly:Boolean(req.body.roomId)});
 
+        // Runs inside a 1v1 battle feed the post-battle behaviour analysis (verdict name only).
+        if (req.body.battleId) {
+            require('../services/integrity/integrity.service')
+                .recordRun(req.body.battleId, req.user.id, result.status)
+                .catch((e) => console.warn('Battle run analytics unavailable:', e.message));
+        }
+
         res.status(200).json({
             success: true,
             message: "Code executed successfully",

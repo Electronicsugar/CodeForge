@@ -702,3 +702,10 @@
   background: linear-gradient(135deg, #ffb947, #ff9447);
   transform: translateY(-1px);
 }
+
+/* ─── Anti-cheat + review additions ─────────────────────────── */
+.opponent-away-pill {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber);
+}
+.gameover-card { max-height: 92vh; overflow-y: auto; max-width: 640px; }

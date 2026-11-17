@@ -7,6 +7,11 @@ import { createSubmission, runCode, getMySubmissions, getSubmissionById } from "
 import { useAuth } from "../context/AuthContext";
 import { useCodeDraft } from '../hooks/useCodeDraft';
 import DraftStatus from '../components/DraftStatus';
+import LanguageSelect from '../components/LanguageSelect';
+import IntegrityBanner from '../components/IntegrityBanner';
+import { useLanguage } from '../hooks/useLanguage';
+import { useContestIntegrity } from '../hooks/useContestIntegrity';
+import { starterFor, commentFor, languageExt } from '../services/languages';
 import {useSubmissionRecovery} from '../hooks/useSubmissionRecovery';
 
 const STATUS_LABELS = {
@@ -32,8 +37,12 @@ function ProblemDetail() {
 
   const [searchParams] = useSearchParams();
   const contestId = searchParams.get("contestId");
-  const draft = useCodeDraft({userId:user?._id || user?.id, problemId:id, language:'cpp', context:contestId ? `contest:${contestId}` : 'practice'}, problem?.starterCode || '', problem?._id === id);
+  const { language, setLanguage, languages } = useLanguage();
+  const draft = useCodeDraft({userId:user?._id || user?.id, problemId:id, language, context:contestId ? `contest:${contestId}` : 'practice'}, starterFor(problem, language), problem?._id === id);
   const {code, setCode} = draft;
+  const editorWrapRef = useRef(null);
+  // Contest anti-cheat: recorded for organisers (no automatic disqualification). Practice is never monitored.
+  const integrity = useContestIntegrity({ contestId, problemId: id, enabled: Boolean(contestId), scopeRef: editorWrapRef });
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [runResult, setRunResult] = useState(null);
@@ -249,7 +258,7 @@ function ProblemDetail() {
     setExecutionMode("run");
     setActiveCaseIndex(0);
     try {
-      const res = await runCode({ problem: id, language: "cpp", code });
+      const res = await runCode({ problem: id, language, code });
       setRunResult(res.data);
     } catch (err) {
       setExecError(err.response?.data?.message || "Code execution failed. Please try again.");
@@ -314,7 +323,7 @@ function ProblemDetail() {
     const res = await createSubmission({
       userId:user?._id||user?.id,context:contestId?`contest:${contestId}`:'practice',
       problem: id,
-      language: "cpp",
+      language,
       code,
     });
 
@@ -378,7 +387,7 @@ function ProblemDetail() {
   /* Reset code back to starter code */
   const handleResetCode = () => {
     if (running || submitting) return;
-    setCode(problem?.starterCode || "");
+    setCode(starterFor(problem, language));
   };
 
   const formatDate = (d) =>
@@ -713,10 +722,10 @@ function ProblemDetail() {
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M5 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11.5L21 17V5a2 2 0 0 0-2-2H5z" fill="#1a4d7a" stroke="#3b82c4" strokeWidth="1" />
                     <path d="M16.5 21L21 17h-3a2 2 0 0 0-2 2v2z" fill="#3b82c4" />
-                    <text x="12" y="15.5" textAnchor="middle" fontSize="7.5" fontWeight="700" fontFamily="Consolas, monospace" fill="#7ec3ff">cpp</text>
+                    <text x="12" y="15.5" textAnchor="middle" fontSize="7.5" fontWeight="700" fontFamily="Consolas, monospace" fill="#7ec3ff">{languageExt(languages, language)}</text>
                   </svg>
                 </span>
-                solution.cpp
+                {`solution.${languageExt(languages, language)}`}
               </div>
             </div>
             <div className="dp-editor-right">
@@ -732,14 +741,15 @@ function ProblemDetail() {
                 </svg>
                 Reset
               </button>
-              <div className="dp-lang-badge">C++17</div>
+              <LanguageSelect language={language} languages={languages} onChange={setLanguage} disabled={running || submitting} />
             </div>
           </div>
 
           {/* CODE EDITOR */}
           <DraftStatus draft={draft} />
           <div className="submission-recovery" role="status">{recovery.error && <span className="submission-recovery__error">{recovery.error}</span>}<button className="draft-action" type="button" disabled={!draft.canEdit} onClick={recovery.recover}>Recover submission status</button></div>
-          <div className="dp-editor-wrap">
+          {contestId && <IntegrityBanner warning={integrity.notice} mode="contest" onDismiss={integrity.dismiss} />}
+          <div className="dp-editor-wrap" ref={editorWrapRef}>
             <div className="dp-gutter" ref={gutterRef}>
               {Array.from({ length: lineCount }).map((_, i) => (
                 <div key={i} className="dp-line-num">{i + 1}</div>
@@ -751,14 +761,14 @@ function ProblemDetail() {
               value={code}
               readOnly={!draft.canEdit || draft.resolving}
               wrap="off"
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => { integrity.noteChange(code.length, e.target.value.length, e.nativeEvent?.inputType); setCode(e.target.value); }}
               onKeyDown={handleTabKey}
               onScroll={handleEditorScroll}
               spellCheck={false}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
-              placeholder="// Write your C++ solution here..."
+              placeholder={commentFor(language) + "..."}
             />
           </div>
 
@@ -1038,7 +1048,7 @@ function ProblemDetail() {
                     </div>
                   )}
 
-                  <div className="dp-modal-code-label">Submitted Code (C++)</div>
+                  <div className="dp-modal-code-label">Submitted Code ({languages.find((l) => l.id === selectedSubmission.language)?.label || selectedSubmission.language || "C++"})</div>
                   <pre className="dp-modal-code">{selectedSubmission.code}</pre>
                 </>
               )}

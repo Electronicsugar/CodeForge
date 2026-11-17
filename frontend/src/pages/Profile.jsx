@@ -4,6 +4,7 @@ import "./Profile.css";
 import { getUserDashboard, updateProfile, changePassword } from "../services/userService";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
+import CoachCard from "../components/CoachCard";
 
 const STATUS_LABELS = {
   accepted: "Accepted",
@@ -231,6 +232,9 @@ function Profile() {
             Solve Problems →
           </button>
         </div>
+
+        {/* ── AI COACH (battle behaviour + practice patterns) ── */}
+        <CoachCard />
 
         {/* ── MAIN DASHBOARD STATS ── */}
         <div className="prof-stats-grid">

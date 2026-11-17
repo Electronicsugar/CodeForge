@@ -53,6 +53,14 @@ const problemSchema = new mongoose.Schema(
         starterCode: {
             type: String
         },
+        // Optional per-language overrides. Missing languages are generated from
+        // judgeConfig (see services/executor/starter-generator.js).
+        starterCodes: {
+            cpp: { type: String },
+            python: { type: String },
+            javascript: { type: String },
+            java: { type: String }
+        },
         functionName: {
             type: String
         },

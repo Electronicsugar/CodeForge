@@ -8,6 +8,12 @@ import {useSubmissionRecovery} from '../hooks/useSubmissionRecovery';
 import "./BattleArena.css";
 import { useCodeDraft } from '../hooks/useCodeDraft';
 import DraftStatus from '../components/DraftStatus';
+import LanguageSelect from '../components/LanguageSelect';
+import IntegrityBanner from '../components/IntegrityBanner';
+import BattleReview from '../components/BattleReview';
+import { useLanguage } from '../hooks/useLanguage';
+import { useBattleIntegrity } from '../hooks/useBattleIntegrity';
+import { starterFor, commentFor } from '../services/languages';
 
 const STATUS_LABELS = {
   accepted: "Accepted",
@@ -27,7 +33,8 @@ function BattleArena() {
 
   const [battle, setBattle] = useState(location.state?.initialMatch || null);
   const [problem, setProblem] = useState(location.state?.initialMatch?.problem || null);
-  const draft = useCodeDraft({userId:user?._id || user?.id, problemId:problem?._id, language:'cpp', context:'battle', battleId}, problem?.starterCode || '// Write your C++ solution here\n', !!problem && String(battle?._id || battle?.battleId) === battleId);
+  const { language, setLanguage, languages } = useLanguage();
+  const draft = useCodeDraft({userId:user?._id || user?.id, problemId:problem?._id, language, context:'battle', battleId}, starterFor(problem, language) || commentFor(language) + '\n', !!problem && String(battle?._id || battle?.battleId) === battleId);
   const {code, setCode} = draft;
   const [loading, setLoading] = useState(!battle);
 
@@ -59,6 +66,9 @@ function BattleArena() {
   const [showSurrenderModal, setShowSurrenderModal] = useState(false);
 
   const textareaRef = useRef(null);
+  const editorAreaRef = useRef(null);
+  // Anti-cheat: tab switches, large pastes and code appearing without typing are reported to the server.
+  const integrity = useBattleIntegrity({ battleId, enabled: !gameOverData, scopeRef: editorAreaRef });
   const typingTimerRef = useRef(null);
 
   // 1. Initial Battle Data Fetch & Reconnect
@@ -195,12 +205,14 @@ function BattleArena() {
   // Handle Code Typing & Broadcast Code Sync
   const handleCodeChange = (e) => {
     const val = e.target.value;
+    integrity.noteChange(code.length, val.length, e.nativeEvent?.inputType);
     setCode(val);
 
     const socket = getSocket();
     if (socket) {
       socket.emit("code_sync", {
         battleId,
+        language,
         codeLength: val.length,
         linesCount: val.split("\n").length
       });
@@ -237,7 +249,8 @@ function BattleArena() {
       const res = await runCode({
         problem: problem._id,
         problemId: problem._id,
-        language: "cpp",
+        battleId,
+        language,
         code
       });
 
@@ -272,7 +285,7 @@ function BattleArena() {
 
     try {
       await draft.flush();
-      await createSubmission({userId:user?._id||user?.id,context:'battle',problem:problem._id,battleId,code,language:'cpp'});
+      await createSubmission({userId:user?._id||user?.id,context:'battle',problem:problem._id,battleId,code,language});
       recovery.recover();
     } catch(error){setSubmitting(false);setExecError(error.message);}
   };
@@ -437,8 +450,9 @@ function BattleArena() {
           
           {/* Editor Header Bar */}
           <div className="editor-toolbar">
-            <span className="editor-lang-badge">C++ (g++ 17)</span>
+            <LanguageSelect language={language} languages={languages} onChange={setLanguage} disabled={running || submitting || !!gameOverData} />
             
+            {integrity.opponentAway && <span className="opponent-away-pill">Opponent left the tab</span>}
             {oppTyping && (
               <div className="opponent-typing-indicator">
                 <span className="typing-dot" />
@@ -464,10 +478,12 @@ function BattleArena() {
             </div>
           </div>
 
+          <IntegrityBanner warning={integrity.warning} strikes={integrity.strikes} maxStrikes={integrity.maxStrikes} mode="battle" onDismiss={integrity.dismiss} />
+
           {/* Editor Workspace */}
           <DraftStatus draft={draft} />
           <div className="submission-recovery" role="status">{recovery.error && <span className="submission-recovery__error">{recovery.error}</span>}<button className="draft-action" type="button" disabled={!draft.canEdit} onClick={recovery.recover}>Recover submission status</button></div>
-          <div className="code-editor-area">
+          <div className="code-editor-area" ref={editorAreaRef}>
             <div className="editor-line-numbers">
               {code.split("\n").map((_, i) => (
                 <div key={i}>{i + 1}</div>
@@ -482,7 +498,7 @@ function BattleArena() {
               onChange={handleCodeChange}
               onKeyDown={handleKeyDown}
               spellCheck="false"
-              placeholder="// Write your C++ solution here..."
+              placeholder={commentFor(language) + "..."}
               disabled={!!gameOverData}
             />
           </div>
@@ -761,6 +777,8 @@ function BattleArena() {
             <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
               Are you sure you want to forfeit? Your opponent will be awarded the victory and your Elo rating will decrease.
             </p>
+            <BattleReview battleId={battleId} />
+
             <div className="modal-actions">
               <button className="btn-lobby-return" onClick={() => setShowSurrenderModal(false)}>
                 Keep Fighting
@@ -786,10 +804,14 @@ function BattleArena() {
             </h2>
 
             <p className="gameover-subtitle">
-              {isWinner 
+              {isWinner && gameOverData.reason === "cheating"
+                ? "Your opponent was disqualified after repeated integrity warnings."
+                : isWinner
                 ? "Outstanding! You solved the problem first and won the duel."
                 : isDraw
                 ? "Time expired with equal test cases. The match resulted in a draw."
+                : gameOverData.reason === "cheating"
+                ? "You forfeited this battle after repeated integrity warnings."
                 : `Opponent claimed the victory (${gameOverData.reason || "solved first"}).`}
             </p>
 

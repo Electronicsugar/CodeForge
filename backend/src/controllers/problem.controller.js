@@ -1,4 +1,6 @@
 const problemService = require("../services/problem.service");
+const { publicLanguages } = require("../services/executor/languages");
+const { withStarterCodes } = require("../services/executor/starter-generator");
 const submissionService = require("../services/submission.service");
 
 const createProblem = async (req, res) => {
@@ -36,12 +38,16 @@ const getProblems = async (req, res) => {
     }
 };
 
+const getLanguages = (req, res) => {
+    res.status(200).json({ success: true, data: publicLanguages() });
+};
+
 const getProblemById = async (req, res) => {
     try {
         const problem = await problemService.getProblemById(req.params.id);
         res.status(200).json({
             success: true,
-            data: problem
+            data: withStarterCodes(problem)
         });
 
     } catch (error) {
@@ -101,5 +107,5 @@ const getProblemSubmissions = async (req, res) => {
 };
 
 module.exports = {
-    createProblem, getProblems, getProblemById, updateProblem, deleteProblem, getProblemSubmissions
+    createProblem, getProblems, getProblemById, getLanguages, updateProblem, deleteProblem, getProblemSubmissions
 };

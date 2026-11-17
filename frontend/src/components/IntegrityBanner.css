@@ -1,0 +1,10 @@
+.integrity { display: flex; flex-direction: column; gap: 6px; }
+.integrity__status { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.integrity__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+.integrity__count { color: var(--text-muted); }
+.integrity__banner {
+  position: relative; padding: 8px 32px 8px 12px; border-radius: var(--radius-sm); font-size: 13px;
+  background: var(--amber-dim); border: 1px solid var(--amber); color: var(--text-primary);
+}
+.integrity__banner--danger { background: var(--red-dim); border-color: var(--red); }
+.integrity__close { position: absolute; right: 8px; top: 4px; background: none; border: 0; color: inherit; font-size: 18px; cursor: pointer; }

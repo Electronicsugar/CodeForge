@@ -14,7 +14,10 @@
   "main": "server.js",
   "scripts": {
     "start": "nodemon server.js",
-    "migrate:atlas": "node src/scripts/migrateToAtlas.js"
+    "migrate:atlas": "node src/scripts/migrateToAtlas.js",
+    "test:unit": "node --test tests/multiLanguage.test.cjs tests/antiCheat.test.cjs tests/integrityService.test.cjs tests/analysis.test.cjs tests/runnerSafety.test.cjs",
+    "verify:problems": "node src/scripts/seedProblemBank.js --verify",
+    "seed:problems": "node src/scripts/seedProblemBank.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

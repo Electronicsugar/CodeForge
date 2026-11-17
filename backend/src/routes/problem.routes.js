@@ -12,6 +12,9 @@ router.post("/", authMiddleware, adminMiddleware, problemController.createProble
 // Get all + filters + pagination
 router.get("/", problemController.getProblems);
 
+// Languages the judge supports (drives the editor's language picker)
+router.get("/languages", problemController.getLanguages);
+
 // Problem-specific submissions
 router.get("/:problemId/submissions", authMiddleware, problemController.getProblemSubmissions);
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "./ProblemList.css";
 import { getProblems, deleteProblem } from "../services/problemService";
 import { getMyStats } from "../services/submissionService";
@@ -10,6 +10,8 @@ const DIFFICULTIES = ["all", "easy", "medium", "hard"];
 
 function ProblemList() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tag = searchParams.get("tag") || "";
   const { user } = useAuth();
   const [problems, setProblems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
@@ -37,6 +39,7 @@ function ProblemList() {
       const params = { page, limit: 20 };
       if (search.trim()) params.search = search.trim();
       if (difficulty !== "all") params.difficulty = difficulty;
+      if (tag) params.tag = tag;
       const res = await getProblems(params);
       setProblems(res.data.problems);
       setPagination(res.data.pagination);
@@ -45,7 +48,7 @@ function ProblemList() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, difficulty]);
+  }, [page, search, difficulty, tag]);
 
   useEffect(() => {
     fetchProblems();
@@ -71,6 +74,11 @@ function ProblemList() {
         {/* ── SIDEBAR ── */}
         <aside className="pl-sidebar">
           <div className="sidebar-card">
+            {tag && (
+              <button className="sidebar-item active" onClick={() => { setSearchParams({}); setPage(1); }} title="Clear tag filter">
+                Tag: {tag} ×
+              </button>
+            )}
             <div className="sidebar-heading">Difficulty</div>
             {DIFFICULTIES.map((lvl) => (
               <button

@@ -3,6 +3,7 @@ const problemRepository = require("../repositories/problem.repository");
 const Submission = require('../models/Submission');
 const {createHash} = require('node:crypto');
 const {enqueue} = require('./submissionEnqueue.service');
+const {isSupported, SUPPORTED} = require('./executor/languages');
 const failure = (status,message) => Object.assign(new Error(message),{status});
 function fingerprint(data) {
     if(data.roomId&&(data.collaborative===true||data.sourceHash))return createHash('sha256').update(JSON.stringify([String(data.problem),data.language,String(data.roomId),'shared',data.sourceHash])).digest('hex');
@@ -46,8 +47,13 @@ const createSubmission = async (submissionData, userId) => {
         throw new Error("Problem not found");
     }
 
-    if (submissionData.language !== "cpp") {
-        throw new Error("Only C++ is supported currently");
+    if (!isSupported(submissionData.language)) {
+        throw failure(400, `Unsupported language. Supported: ${SUPPORTED.join(", ")}`);
+    }
+    // Battle rooms (1v1–4v4 with the shared Yjs editor and behaviour analytics)
+    // are still C++-only; reject early instead of failing inside the judge.
+    if (submissionData.roomId && submissionData.language !== "cpp") {
+        throw failure(400, "Battle rooms currently support C++ only");
     }
     let submission;
     try { submission = await submissionRepository.create({

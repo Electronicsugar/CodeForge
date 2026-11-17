@@ -1,0 +1,18 @@
+.coach { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin: 16px 0; }
+.coach__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.coach__head h3 { margin: 0; font-size: 16px; color: var(--text-primary); }
+.coach__badge { font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border-strong); border-radius: 999px; padding: 2px 8px; }
+.coach__headline { font-size: 14px; line-height: 1.55; color: var(--text-primary); margin: 0 0 12px; }
+.coach__muted { color: var(--text-secondary); font-size: 13px; margin: 0; }
+.coach__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.coach__stats div { background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+.coach__stats b { display: block; font-size: 18px; color: var(--text-primary); }
+.coach__stats span { font-size: 11px; color: var(--text-secondary); }
+.coach__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.coach__tag { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--amber-dim); color: var(--amber); cursor: help; }
+.coach h4 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+.coach__good { color: var(--green) !important; }
+.coach ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; color: var(--text-primary); }
+.coach__practice { font-size: 13px; color: var(--text-secondary); margin: 10px 0 0; }
+.coach__practice a { margin-left: 8px; color: var(--blue); }
+@media (max-width: 520px) { .coach__stats { grid-template-columns: 1fr; } }

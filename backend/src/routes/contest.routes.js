@@ -18,6 +18,10 @@ router.get("/:contestId/status", authMiddleware, contestController.getContestSta
 
 router.get("/:contestId/problems", authMiddleware, contestController.getContestProblems);
 
+router.post("/:contestId/integrity", authMiddleware, contestController.reportIntegrityEvent);
+
+router.get("/:contestId/integrity", authMiddleware, adminMiddleware, contestController.getIntegrityReport);
+
 router.post("/:contestId/calculate-ratings", authMiddleware, adminMiddleware, contestController.calculateContestRatings);
 
 module.exports = router;

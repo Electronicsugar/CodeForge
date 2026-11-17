@@ -23,7 +23,44 @@ vector<int> parseVectorInt(string input) {
 };
 
 
+const generateVectorVectorIntParser = () => {
+    return `
+vector<vector<int>> parseVectorVectorInt(const string& input) {
+    vector<vector<int>> rows;
+    vector<int> current;
+    string number;
+    int depth = 0;
+
+    auto flush = [&]() {
+        if (!number.empty()) { current.push_back(stoi(number)); number.clear(); }
+    };
+
+    for (char c : input) {
+        if (c == '[') {
+            depth++;
+            if (depth == 2) current.clear();
+        } else if (c == ']') {
+            flush();
+            if (depth == 2) rows.push_back(current);
+            depth--;
+        } else if (c == ',') {
+            flush();
+        } else if (c == '-' || isdigit((unsigned char)c)) {
+            number += c;
+        }
+    }
+    return rows;
+}
+`;
+};
+
 const generateParameterParser = (parameter, index) => {
+
+    if (parameter.type === "vector<vector<int>>") {
+        return `
+    vector<vector<int>> ${parameter.name} = parseVectorVectorInt(lines[${index}]);
+`;
+    }
 
     if (parameter.type === "bool") {
         return `
@@ -76,6 +113,24 @@ const generateParameterParser = (parameter, index) => {
 
 
 const generateReturnOutput = (returnType) => {
+    if (returnType === "vector<vector<int>>") {
+        return `
+    cout << "[";
+
+    for (int i = 0; i < (int)result.size(); i++) {
+        if (i > 0) cout << ",";
+        cout << "[";
+        for (int j = 0; j < (int)result[i].size(); j++) {
+            if (j > 0) cout << ",";
+            cout << result[i][j];
+        }
+        cout << "]";
+    }
+
+    cout << "]";
+`;
+    }
+
     if (returnType === "double") {
         return `
     cout << result;
@@ -94,7 +149,7 @@ const generateReturnOutput = (returnType) => {
 
     for (int i = 0; i < result.size(); i++) {
         if (i > 0) cout << ",";
-         cout << "\"" << result[i] << "\"";
+         cout << "\\\"" << result[i] << "\\\"";
     }
 
     cout << "]";
@@ -175,7 +230,7 @@ vector<string> parseVectorString(string input) {
 `;
 };
 
-const generateCode = (problem, userCode) => {
+const generateCppCode = (problem, userCode) => {
 
     const judgeConfig = problem.judgeConfig;
 
@@ -205,9 +260,14 @@ const generateCode = (problem, userCode) => {
         parameter => parameter.type === "vector<string>"
     );
 
+    const needsGridParser = judgeConfig.parameters.some(
+        parameter => parameter.type === "vector<vector<int>>"
+    );
+
     const vectorParser = `
     ${needsVectorIntParser ? generateVectorIntParser() : ""}
     ${needsVectorStringParser ? generateVectorStringParser() : ""}
+    ${needsGridParser ? generateVectorVectorIntParser() : ""}
     `;
 
 const normalizedUserCode = userCode.trim().endsWith(";")
@@ -247,6 +307,20 @@ ${returnOutput}
 
 
 
+
+const generateCode = (problem, userCode, language = "cpp") => {
+    const wrappers = require("./wrappers");
+    wrappers.validateConfig(problem.judgeConfig);
+
+    switch (language) {
+        case "cpp":        return generateCppCode(problem, userCode);
+        case "python":     return wrappers.generatePython(problem, userCode);
+        case "javascript": return wrappers.generateJavaScript(problem, userCode);
+        case "java":       return wrappers.generateJava(problem, userCode);
+        default:
+            throw new Error(`Unsupported language: ${language}`);
+    }
+};
 
 module.exports = {
     generateCode

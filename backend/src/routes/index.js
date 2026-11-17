@@ -54,6 +54,8 @@ router.use("/contests", contestRoutes);
 
 router.use("/battles", battleRoutes);
 
+router.use("/coach", require("./coach.routes"));
+
 router.use(leaderboardRoutes);
 
 module.exports=router;
