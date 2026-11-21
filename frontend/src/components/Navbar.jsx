@@ -14,7 +14,6 @@ function Navbar() {
   const activeKey =
     path.startsWith("/problems") ? "problems" :
     path.startsWith("/battle") ? "battle" :
-    path.startsWith("/contests") ? "contests" :
     path.startsWith("/submissions") ? "submissions" :
     path.startsWith("/profile") ? "profile" : "";
 
@@ -31,7 +30,6 @@ function Navbar() {
   const navItems = [
     { key: "problems",    label: "Problems",    path: "/problems" },
     { key: "battle",      label: "Battle",      path: "/battle" },
-    { key: "contests",    label: "Contests",    path: "/contests" },
     { key: "submissions", label: "Submissions", path: "/submissions" },
     { key: "profile",     label: "Profile",     path: "/profile" },
   ];

@@ -10,9 +10,6 @@ import BattleLobby   from "./pages/BattleLobby";
 import BattleArena   from "./pages/BattleArena";
 import BattleRoom from './pages/BattleRoom';
 import BehaviourProfile from './pages/BehaviourProfile';
-import Contests      from "./pages/Contests";
-import ContestDetail from "./pages/ContestDetail";
-import CreateContest from "./pages/CreateContest";
 import CreateProblem from "./pages/CreateProblem";
 import EditProblem   from "./pages/EditProblem";
 import Submissions   from "./pages/Submissions";
@@ -56,17 +53,7 @@ function App() {
           <Route path="/battle/rooms/:roomId" element={<ProtectedRoute><BattleRoom/></ProtectedRoute>}/>
           <Route path="/battle/rooms/:roomId/profile" element={<ProtectedRoute><BehaviourProfile/></ProtectedRoute>}/>
 
-          <Route path="/contests" element={
-            <ProtectedRoute><Contests /></ProtectedRoute>
-          } />
-
-          <Route path="/contests/create" element={
-            <ProtectedRoute><CreateContest /></ProtectedRoute>
-          } />
-
-          <Route path="/contests/:id" element={
-            <ProtectedRoute><ContestDetail /></ProtectedRoute>
-          } />
+          <Route path="/contests/*" element={<Navigate to="/problems" replace />} />
 
           <Route path="/submissions" element={
             <ProtectedRoute><Submissions /></ProtectedRoute>
