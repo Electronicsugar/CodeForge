@@ -21,8 +21,9 @@ module.exports=async({t,mongoose,problem,userId,io})=>{
     if(roomId)assert.equal((await ack(socket,'battle_room_join',{roomId})).success,true);return socket;
   }
   try{
-    for(const size of [1,2])await t.test(`${size}v${size} room warnings persist and third strike forfeits the entire team with server-side editor/submission closure`,async()=>{
+    for(const size of [1,2])await t.test(`${size}v${size} room strikes persist silently and third strike forfeits the entire team with server-side editor/submission closure`,async()=>{
       const {room,users}=await create(size),roomId=String(room._id),actor=await connect(users[0],roomId),beta=await connect(users[size],roomId),host=await connect(userId,roomId);
+      const warnings=[];actor.on('room_integrity_warning',value=>warnings.push(value));
       const event=(type='paste',meta={length:100})=>({roomId,eventId:randomUUID(),type,meta});
       assert.equal((await ack(host,'room_integrity_event',event())).status,403);
       const outsider=await connect(String((await mongoose.model('User').create({name:'Outsider',email:`${randomUUID()}@example.com`,password:'test-only'}))._id));
@@ -43,7 +44,7 @@ module.exports=async({t,mongoose,problem,userId,io})=>{
         delete require.cache[require.resolve('../src/services/roomIntegrity.service')];
         assert.equal((await rooms.view(roomId,users[0])).integrity.strikes,1);
         await pause(2600);assert.equal((await ack(actor,'room_integrity_event',event())).strikes,2);
-        await pause(2600);const final=await ack(actor,'room_integrity_event',event());assert.equal(final.action,'forfeit');assert.equal(final.strikes,3);
+        await pause(2600);const final=await ack(actor,'room_integrity_event',event());assert.equal(final.action,'forfeit');assert.equal(final.strikes,3);assert.equal(final.message,undefined);assert.deepEqual(warnings,[]);
         const finished=await rooms.load(roomId);assert.equal(finished.status,'completed');assert.equal(String(finished.winnerTeam),String(room.teams[1]._id));assert.equal(String(finished.forfeitedTeam),String(room.teams[0]._id));assert.equal(finished.teams[0].members.length,size);
         assert.equal((await ack(actor,'collab_update',{key:joined.key,update:Y.encodeStateAsUpdate(doc)})).status,403);
         await assert.rejects(require('../src/services/submission.service').createSubmission({roomId,problem:String(problem._id),language:'cpp',code:'blocked',idempotencyKey:randomUUID()},users[0]),error=>error.status===403);

@@ -57,7 +57,7 @@ test('room language selector saves independent drafts and restores the selected 
   await page.reload();await expect(language).toHaveValue('python');await expect(editor).toHaveValue('print(42)');
 });
 
-test('room paste and tab warnings persist after refresh and the third strike ends the team battle',async({context,page})=>{
+test('room paste and tab strikes stay silent after refresh and the third strike disqualifies the team',async({context,page})=>{
   const initial=room(2,false,true);initial.teams[0].members.push({user:{_id:'teammate',name:'Teammate'},ready:true});
   const fixture=await setup(context,{initial});let policyState=integrityPolicy.newState();
   await context.exposeFunction('recordRoomRuleTest',data=>{
@@ -74,12 +74,12 @@ test('room paste and tab warnings persist after refresh and the third strike end
   await page.goto('/battle/rooms/room1');const editor=page.getByRole('textbox',{name:'Battle code'});
   await expect(editor).toHaveValue(problem('p1').starterCode);
   const paste=()=>editor.evaluate(node=>{const event=new Event('paste',{bubbles:true});Object.defineProperty(event,'clipboardData',{value:{getData:()=> 'x'.repeat(50)}});node.dispatchEvent(event);});
-  await paste();await expect(page.locator('.integrity__count')).toContainText('1/3');await expect(page.getByRole('alert')).toContainText('A large paste was detected.');
-  await page.reload();await expect(page.locator('.integrity__count')).toContainText('1/3');
+  await paste();await expect.poll(()=>fixture.state.integrity?.strikes).toBe(1);await expect(page.locator('.integrity__count')).toHaveCount(0);await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.reload();await expect(editor).toHaveValue(problem('p1').starterCode);expect(fixture.state.integrity.strikes).toBe(1);await expect(page.locator('.integrity__count')).toHaveCount(0);await expect(page.getByRole('alert')).toHaveCount(0);
   await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await page.waitForTimeout(3200);await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
-  await expect(page.locator('.integrity__count')).toContainText('2/3');await expect(page.getByRole('alert')).toContainText('entire team forfeits');
+  await expect.poll(()=>fixture.state.integrity?.strikes).toBe(2);await expect(page.locator('.integrity__count')).toHaveCount(0);await expect(page.getByRole('alert')).toHaveCount(0);await expect(page.locator('.room-completed')).toHaveCount(0);
   await page.waitForTimeout(2600);await paste();
-  await expect(page.locator('.room-completed')).toContainText('Team Beta wins by forfeit');
+  await expect(page.locator('.room-completed')).toContainText('Team Alpha is disqualified. Team Beta wins.');
   await expect(page.getByRole('button',{name:'Submit code',exact:true})).toBeDisabled();await expect(editor).toHaveJSProperty('readOnly',true);
 });
 for(const size of [1,2,3,4])test(`create private ${size}v${size} with participant random difficulty selection`,async({context,page})=>{

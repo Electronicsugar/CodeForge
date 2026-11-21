@@ -33,7 +33,7 @@ async function record(userId,data){
     const updated=await Room.findOneAndUpdate({_id:room._id,revision:room.revision,status:'in_progress',endTime:{$gt:new Date(now)}},{$set:set,$inc:{revision:1}},{returnDocument:'after'}).lean();
     if(!updated)continue;
     await rooms.notify(updated,result.action==='forfeit'?'integrity_forfeit':'integrity_updated');
-    return {...summary(state),action:result.action,reason:result.strike?.reason,message:result.strike?.awarded?(policy.WARNING_TEXT[result.strike.reason]||'Battle rule warning'):null};
+    return {...summary(state),action:result.action==='warn'?'none':result.action,reason:result.strike?.reason};
   }
   throw fail(409,'Room changed concurrently; retry the same event');
 }

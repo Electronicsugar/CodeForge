@@ -7,7 +7,6 @@ module.exports=(io,socket)=>{
       const claims=jwt.verify(socket.token,process.env.JWT_SECRET);
       if(claims.id!==socket.user.id||!redisClient.isReady||await redisClient.get(`blacklist:${socket.token}`))throw Object.assign(Error('Session verification failed'),{status:403});
       const result=await require('../services/roomIntegrity.service').record(claims.id,data);
-      if(result.message)socket.emit('room_integrity_warning',{roomId:data.roomId,...result});
       if(typeof ack==='function')ack({success:true,...result});
     }catch(error){if(typeof ack==='function')ack({success:false,status:error.status||500,message:error.status?error.message:'Could not record battle event'});}
   });

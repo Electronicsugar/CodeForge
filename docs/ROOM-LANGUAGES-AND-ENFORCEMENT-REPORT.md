@@ -127,10 +127,14 @@ return only the requesting competitor's strike summary; hosts cannot report
 competitor events. Public notifications contain room/status metadata, not source
 or behavioural event records.
 
-The room-level UI discloses the rules before start, displays warnings and a
-persistent counter, and shows the winning team when a forfeit occurs. Monitoring
+The room-level UI discloses the rules before start. During the battle there are
+no strike warning popups or visible strike counter. The third qualifying strike
+by any participant immediately disqualifies their entire team and declares the
+opposing team the winner. No confirmation is required. Copying alone remains
+penalty-free; existing paste/absence thresholds and duplicate-event safeguards
+remain unchanged. The server does not emit room integrity warning events. Monitoring
 uses the existing Socket.IO singleton and starts only for active competitors.
-It survives problem/language switches and restores the counter after refresh;
+It survives problem/language switches and restores private strike state after refresh;
 queued retries keep their event UUID. Switching accounts drops the old event
 queue. Offline events cannot be independently verified; browser signals can be
 bypassed and are not proof of cheating.
@@ -149,3 +153,12 @@ Full lint passed with existing unrelated warnings. Production build and public
 deployment are recorded in the final task report. An earlier integration attempt was cancelled at its 180-second parent
 limit under low free memory; the sequential rerun passed all 53 checks with a
 300-second test-only budget. These limits do not alter battle deadlines.
+
+Silent-disqualification update (2026-11-21): 58 backend unit tests, 53
+disposable-database integration checks, all 26 battle-room browser checks and
+18 frontend unit tests passed. Frontend lint passed with existing warnings; the
+production build passed with its existing bundle-size warning. The first backend
+unit attempt had seven local-network failures under restricted execution; all
+58 passed when rerun with local-network access. Socket integration verifies no
+warning event is emitted, the winner is persisted, and late edits/submissions
+are rejected. No live database records or secrets were changed.

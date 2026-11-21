@@ -5,14 +5,14 @@ import {attachIntegrityListeners} from '../services/integrity';
 export function useRoomIntegrity({roomId,userId,verified,enabled,persisted}){
   const active=useRef(enabled),listeners=useRef(null),queue=useRef([]),report=useRef(()=>{}),lastPaste=useRef(0);
   active.current=enabled;
-  const [state,setState]=useState({strikes:0,maxStrikes:3}),[warning,setWarning]=useState(null),[error,setError]=useState('');
-  useEffect(()=>{setState({strikes:0,maxStrikes:3});setWarning(null);setError('');queue.current=[];lastPaste.current=0;},[roomId,userId]);
+  const [state,setState]=useState({strikes:0,maxStrikes:3}),[error,setError]=useState('');
+  useEffect(()=>{setState({strikes:0,maxStrikes:3});setError('');queue.current=[];lastPaste.current=0;},[roomId,userId]);
   useEffect(()=>{if(persisted)setState(previous=>({...persisted,strikes:Math.max(previous.strikes,persisted.strikes||0)}));},[persisted]);
   useEffect(()=>{
     if(!verified)return;
     const socket=getSocket();if(!socket)return;
     let disposed=false,flushing=false;
-    const apply=data=>{if(disposed||data.roomId&&data.roomId!==roomId)return;setState(previous=>({...previous,...data,strikes:Math.max(previous.strikes,data.strikes||0)}));if(data.message)setWarning({...data,at:Date.now()});};
+    const apply=data=>{if(disposed||data.roomId&&data.roomId!==roomId)return;setState(previous=>({...previous,...data,strikes:Math.max(previous.strikes,data.strikes||0)}));};
     const flush=async()=>{
       if(flushing||!socket.connected||disposed)return;flushing=true;
       try{
@@ -40,12 +40,11 @@ export function useRoomIntegrity({roomId,userId,verified,enabled,persisted}){
     report.current=send;
     const resume=()=>{if(active.current){send(document.hidden?'tab_hidden':'tab_visible',{});send(document.hasFocus()?'window_focus':'window_blur',{});}void flush();};
     listeners.current=attachIntegrityListeners({send,enabled:()=>active.current,scope:()=>document.querySelector('.room-editor .monaco-editor')||document.querySelector('.room-editor > textarea')});
-    socket.on('room_integrity_warning',apply);socket.on('connect',resume);
+    socket.on('connect',resume);
     const timer=setInterval(flush,5000);
-    return()=>{disposed=true;clearInterval(timer);listeners.current?.dispose();listeners.current=null;report.current=()=>{};socket.off('room_integrity_warning',apply);socket.off('connect',resume);};
+    return()=>{disposed=true;clearInterval(timer);listeners.current?.dispose();listeners.current=null;report.current=()=>{};socket.off('connect',resume);};
   },[roomId,userId,verified]);
   useEffect(()=>{if(enabled&&verified){report.current(document.hidden?'tab_hidden':'tab_visible',{});report.current(document.hasFocus()?'window_focus':'window_blur',{});}},[enabled,verified,roomId,userId]);
   const noteChange=useCallback((previous,next,inputType)=>listeners.current?.noteChange(previous,next,Date.now()-lastPaste.current<500?'insertFromPaste':inputType),[]);
-  const dismiss=useCallback(()=>setWarning(null),[]);
-  return {...state,warning,error,noteChange,dismiss};
+  return {...state,error,noteChange};
 }
