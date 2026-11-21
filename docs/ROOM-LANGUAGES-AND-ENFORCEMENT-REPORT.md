@@ -1,5 +1,9 @@
 # Multilingual rooms, restored enforcement and coaching verification
 
+Latest update: 21 November 2026. New battle rooms now have their own integrity
+enforcement as described in the final section below, superseding the earlier
+legacy-only limitation.
+
 This follow-up applies the user's revised requirements after integration commit
 `b3da123`, on `integration/combine-codeforge`. It supersedes the earlier report's
 monitoring-only override, C++-only room limitation and unresolved hook lint error.
@@ -97,3 +101,51 @@ npm run build
 No existing secrets, database volumes, deployment configuration or running public
 deployment was replaced. This remains a local integration candidate; it has not
 been merged to main, pushed or deployed by this follow-up.
+
+
+## New battle-room enforcement — 21 November 2026
+
+Per the user's explicit rule, a participant reaching the strike limit forfeits
+**their entire team**, in every room size from 1v1 through 4v4. Room scoring/Elo
+behavior is otherwise unchanged; an integrity forfeit records winner/forfeited
+team metadata and ends editing/submission without assigning Elo or team scores.
+
+The room socket handler now authenticates JWT/Redis state and derives roster/team
+membership on the server. The existing pure integrity rules handle paste lengths,
+large local insertions, tab/window absence, small pastes and copy/cut. Defaults
+remain 25 characters for a paste, 80 for a large insertion, three seconds away,
+three strikes, and the existing 2.5-second strike cooldown. Copying alone is not
+a strike. Explicit monitor mode remains supported.
+
+State is durable in an optional private member `integrityState`. A single room
+revision compare-and-swap persists the event and, at the final strike, completes
+the room atomically. The actual end time is recorded immediately. Event UUIDs
+make acknowledgement retries idempotent (256 recent IDs); event payloads are
+limited to 2 KiB and policy traffic limits remain in force. No source/clipboard
+text is stored in integrity state. Room views remove private member states and
+return only the requesting competitor's strike summary; hosts cannot report
+competitor events. Public notifications contain room/status metadata, not source
+or behavioural event records.
+
+The room-level UI discloses the rules before start, displays warnings and a
+persistent counter, and shows the winning team when a forfeit occurs. Monitoring
+uses the existing Socket.IO singleton and starts only for active competitors.
+It survives problem/language switches and restores the counter after refresh;
+queued retries keep their event UUID. Switching accounts drops the old event
+queue. Offline events cannot be independently verified; browser signals can be
+bypassed and are not proof of cheating.
+
+Monaco reports only local model changes for large-insertion enforcement. Remote
+Yjs updates, initial/programmatic flushes, undo and redo do not become local
+insertion violations. Direct paste attribution prevents a paste also becoming a
+second large-insertion event. Existing analytics still use their separate private
+aggregate data. Local backups, shared source, immutable submissions, hidden tests
+and all 34 existing problem records remain intact.
+
+Verification: 58 backend unit checks and 53 disposable-database integration checks
+passed. All 60 browser checks and 18 frontend unit checks passed, including remote-edit
+attribution, warning/refresh/forfeit behavior, existing collaboration and recovery.
+Full lint passed with existing unrelated warnings. Production build and public
+deployment are recorded in the final task report. An earlier integration attempt was cancelled at its 180-second parent
+limit under low free memory; the sequential rerun passed all 53 checks with a
+300-second test-only budget. These limits do not alter battle deadlines.

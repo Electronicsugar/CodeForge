@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {execFileSync}=require('node:child_process');
 const {randomUUID}=require('node:crypto');
-test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120000}, async t=>{
+test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:300000}, async t=>{
   assert.match(process.env.MONGO_URI||'',/\/codeforge_resilience_test$/,'Only a disposable test database is allowed');
   // Exercise the explicit development policy in the isolated API. Production limits
   // and ignored overrides are separately exercised in rateLimits.test.cjs.
@@ -46,6 +46,7 @@ test('isolated API, MongoDB, Redis and Docker judging integration', {timeout:120
     const payload=()=>({problem:problem._id.toString(),language:'cpp',code:'class Solution { public: int doubleIt(int n) { return n * 2; } };'});
     await require('./battleRooms.scenarios.cjs')({t,mongoose,problem,userId,request,until,io});
     await require('./collaboration.scenarios.cjs')({t,mongoose,problem,userId,io,until});
+    await require('./roomIntegrity.scenarios.cjs')({t,mongoose,problem,userId,io});
     await t.test('concurrent replays and lost acknowledgement create one logical submission; real Docker worker accepts it',async()=>{
       const key=randomUUID();const responses=await Promise.all(Array.from({length:3},()=>request('/submissions',payload(),key)));
       const bodies=await Promise.all(responses.map(r=>r.json()));

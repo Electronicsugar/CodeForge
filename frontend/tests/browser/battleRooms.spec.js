@@ -1,4 +1,7 @@
 import {test,expect} from '@playwright/test';
+import {createRequire} from 'node:module';
+const require=createRequire(new URL('../../../backend/package.json',import.meta.url));
+const integrityPolicy=require('./src/services/integrity/integrity.policy');
 const problem=id=>({_id:id,problemNumber:1,title:id==='p1'?'Double a number':'Other problem',difficulty:'easy',description:'Given an integer n, return twice its value. Work independently while following your team’s progress.',starterCode:'class Solution {\npublic:\n int doubleIt(int n) { return 0; }\n};',constraints:['-100000 ≤ n ≤ 100000'],examples:[{input:'21',output:'42',explanation:'Twice 21 is 42.'}]});
 function room(size=1,external=false,started=false){return {_id:'room1',code:'ABCDEFGH',teamSize:size,host:{_id:'user-a',name:'Host A'},hostType:external?'EXTERNAL_HOST':'PARTICIPANT_HOST',duration:15,problemCount:1,selectionMode:'RANDOM_DISTRIBUTION',difficulties:['easy'],problems:started?[problem('p1')]:[],revision:0,status:started?'in_progress':'waiting',startTime:started?new Date(Date.now()-60000).toISOString():null,endTime:started?new Date(Date.now()+840000).toISOString():null,serverTime:new Date().toISOString(),canStart:false,startReasons:['Beta has no competitors','Alpha has no assigned lead','Beta has no assigned lead'],scoringMode:'deferred',submissions:[],progress:[],admissions:[],teams:[{_id:'alpha',name:'Alpha',lead:null,admissionPolicy:'OPEN',teamReady:false,members:external?[]:[{user:{_id:'user-a',name:'Host A'},ready:false,online:true}]},{_id:'beta',name:'Beta',lead:null,admissionPolicy:'OPEN',teamReady:false,members:[]}]};}
 async function setup(context,{initial,viewer='user-a',approval=false,previewError=false,createError=false}={}){
@@ -7,7 +10,7 @@ async function setup(context,{initial,viewer='user-a',approval=false,previewErro
   await context.addInitScript(id=>localStorage.setItem('token',`test.${btoa(JSON.stringify({id}))}.signature`),viewer);
   await context.route('**/health',route=>route.fulfill({json:{status:'ok'}}));
   await context.route('**/src/services/socket.js',route=>route.fulfill({contentType:'text/javascript',body:`
-    const listeners=new Map();const socket={connected:true,on(n,h){if(!listeners.has(n))listeners.set(n,new Set());listeners.get(n).add(h);},off(n,h){listeners.get(n)?.delete(h);},emit(){},connect(){for(const h of listeners.get('connect')||[])h();}};
+    const listeners=new Map();const socket={connected:true,on(n,h){if(!listeners.has(n))listeners.set(n,new Set());listeners.get(n).add(h);},off(n,h){listeners.get(n)?.delete(h);},emit(name,data,ack){if(name==='room_integrity_event')ack?.({success:true,strikes:0,maxStrikes:3});},connect(){for(const h of listeners.get('connect')||[])h();}};
     window.roomTestSocket=socket;export const getSocket=()=>socket;export const disconnectSocket=()=>{};
   `}));
   await context.route('**/api/v1/**',async route=>{
@@ -52,6 +55,32 @@ test('room language selector saves independent drafts and restores the selected 
   await language.selectOption('cpp');await expect(editor).toHaveValue('// saved cpp room');
   await language.selectOption('python');await expect(editor).toHaveValue('print(42)');
   await page.reload();await expect(language).toHaveValue('python');await expect(editor).toHaveValue('print(42)');
+});
+
+test('room paste and tab warnings persist after refresh and the third strike ends the team battle',async({context,page})=>{
+  const initial=room(2,false,true);initial.teams[0].members.push({user:{_id:'teammate',name:'Teammate'},ready:true});
+  const fixture=await setup(context,{initial});let policyState=integrityPolicy.newState();
+  await context.exposeFunction('recordRoomRuleTest',data=>{
+    if(fixture.state.status!=='in_progress')return {success:true,ignored:true,strikes:policyState.strikes,maxStrikes:3};
+    const result=integrityPolicy.applyEvent(policyState,data,Date.now());policyState=result.state;
+    fixture.state.integrity={strikes:policyState.strikes,maxStrikes:3,pasteMinChars:25,tabAwayMinMs:3000};fixture.state.revision++;
+    if(result.action==='forfeit'){fixture.state.status='completed';fixture.state.endReason='integrity_forfeit';fixture.state.winnerTeam='beta';fixture.state.forfeitedTeam='alpha';}
+    return {success:true,roomId:'room1',strikes:policyState.strikes,maxStrikes:3,message:result.strike?.awarded?integrityPolicy.WARNING_TEXT[result.strike.reason]:null,action:result.action};
+  });
+  await context.route('**/src/services/socket.js',route=>route.fulfill({contentType:'text/javascript',body:`
+    const handlers=new Map();const socket={connected:true,on(name,fn){if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(fn);},off(name,fn){handlers.get(name)?.delete(fn);},emit(name,data,ack){if(name==='room_integrity_event')window.recordRoomRuleTest(data).then(reply=>{ack?.(reply);if(reply.message)for(const fn of handlers.get('room_integrity_warning')||[])fn(reply);for(const fn of handlers.get('battle_room_updated')||[])fn({roomId:'room1'});});},connect(){}};
+    export const getSocket=()=>socket;export const disconnectSocket=()=>{};
+  `}));
+  await page.goto('/battle/rooms/room1');const editor=page.getByRole('textbox',{name:'Battle code'});
+  await expect(editor).toHaveValue(problem('p1').starterCode);
+  const paste=()=>editor.evaluate(node=>{const event=new Event('paste',{bubbles:true});Object.defineProperty(event,'clipboardData',{value:{getData:()=> 'x'.repeat(50)}});node.dispatchEvent(event);});
+  await paste();await expect(page.locator('.integrity__count')).toContainText('1/3');await expect(page.getByRole('alert')).toContainText('A large paste was detected.');
+  await page.reload();await expect(page.locator('.integrity__count')).toContainText('1/3');
+  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await page.waitForTimeout(3200);await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.integrity__count')).toContainText('2/3');await expect(page.getByRole('alert')).toContainText('entire team forfeits');
+  await page.waitForTimeout(2600);await paste();
+  await expect(page.locator('.room-completed')).toContainText('Team Beta wins by forfeit');
+  await expect(page.getByRole('button',{name:'Submit code',exact:true})).toBeDisabled();await expect(editor).toHaveJSProperty('readOnly',true);
 });
 for(const size of [1,2,3,4])test(`create private ${size}v${size} with participant random difficulty selection`,async({context,page})=>{
   const fixture=await setup(context);await page.goto('/battle');

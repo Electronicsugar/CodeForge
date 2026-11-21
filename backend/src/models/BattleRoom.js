@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const memberSchema = new mongoose.Schema({
   user:{type:mongoose.Schema.Types.ObjectId,ref:'User',required:true},
   ready:{type:Boolean,default:false},joinedAt:{type:Date,default:Date.now},
+  integrityState:{type:mongoose.Schema.Types.Mixed,default:undefined},
 },{_id:false});
 const teamSchema = new mongoose.Schema({
   name:{type:String,enum:['Alpha','Beta'],required:true},members:[memberSchema],
@@ -25,6 +26,8 @@ const schema = new mongoose.Schema({
   difficulties:[{type:String,enum:['easy','medium','hard']}],admissions:[admissionSchema],
   status:{type:String,enum:['waiting','ready','in_progress','completed','cancelled'],default:'waiting'},
   startTime:Date,endTime:Date,completedAt:Date,cancelledAt:Date,
+  endReason:{type:String,enum:['integrity_forfeit'],default:undefined},
+  winnerTeam:mongoose.Schema.Types.ObjectId,forfeitedTeam:mongoose.Schema.Types.ObjectId,
 },{timestamps:true});
 schema.index({status:1,endTime:1});
 schema.index({host:1,updatedAt:-1});

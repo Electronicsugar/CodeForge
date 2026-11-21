@@ -192,9 +192,10 @@ async function view(roomId,userId){
   const summaries=await Submission.find({battleRoom:room._id}).sort({createdAt:-1}).limit(100).select('_id user teamId problem status createdAt updatedAt').lean();
   const progress=await Submission.aggregate([{$match:{battleRoom:room._id}},{$group:{_id:{teamId:'$teamId',problem:'$problem'},attempts:{$sum:1},accepted:{$sum:{$cond:[{$eq:['$status','accepted']},1,0]}},lastSubmissionAt:{$max:'$createdAt'}}}]);
   const result={...room,host:{_id:id(room.host),name:names.get(id(room.host))||'Host'},problems:visible?room.problems.map(problem=>problems.find(item=>id(item)===id(problem))).filter(Boolean):[],
-    teams:room.teams.map(team=>({...team,members:team.members.map(member=>({...member,online:online.has(id(member.user)),user:{_id:id(member.user),name:names.get(id(member.user))||'Participant'}}))})),
+    teams:room.teams.map(team=>({...team,members:team.members.map(member=>{const {integrityState,...publicMember}=member;return {...publicMember,online:online.has(id(member.user)),user:{_id:id(member.user),name:names.get(id(member.user))||'Participant'}};})})),
     admissions:room.admissions.filter(request=>access.host||id(request.user)===id(userId)||room.teams.some(team=>id(team)===id(request.teamId)&&id(team.lead)===id(userId))).map(request=>({...request,user:{_id:id(request.user),name:names.get(id(request.user))||'Applicant'}})),
     submissions:summaries,progress:progress.map(item=>({teamId:item._id.teamId,problem:item._id.problem,attempts:item.attempts,solved:item.accepted>0,lastSubmissionAt:item.lastSubmissionAt})),serverTime:new Date(),startReasons:startReasons(room),canStart:beforeStart(room)&&ready(room),scoringMode:'deferred',collaborationEnabled:room.editorMode==='collaborative'&&process.env.BATTLE_COLLABORATION!=='false'};
+  if(access.member)result.integrity=require('./roomIntegrity.service').summary(access.member.integrityState);
   return result;
 }
 async function selectedProblem(roomId,userId,problemId,forSubmission=false){

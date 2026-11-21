@@ -26,6 +26,18 @@ async function open(browser,userId,options={}){
 }
 const code=page=>page.evaluate(()=>window.collaborationCode);
 
+test('remote teammate edits never become local integrity insertion events',async({browser})=>{
+  const a=await open(browser,'integrity-local',{problemId:'integrity-attribution'}),b=await open(browser,'integrity-remote',{problemId:'integrity-attribution'});
+  try{
+    await a.page.evaluate(()=>{window.localIntegrityEdits=[];});await b.page.evaluate(()=>{window.localIntegrityEdits=[];});
+    await a.page.locator('.monaco-editor').click({position:{x:90,y:35}});
+    await a.page.keyboard.insertText('LOCAL_INSERTION_'+'x'.repeat(120));
+    await expect.poll(()=>code(b.page)).toContain('LOCAL_INSERTION_');
+    expect((await a.page.evaluate(()=>window.localIntegrityEdits)).length).toBeGreaterThan(0);
+    expect(await b.page.evaluate(()=>window.localIntegrityEdits)).toEqual([]);
+  }finally{await a.context.close();await b.context.close();}
+});
+
 test('Python, JavaScript and Java teammates share language-specific documents without touching C++',async({browser})=>{
   test.setTimeout(120000);
   const cpp=await open(browser,'cpp-control',{problemId:'multi-language',language:'cpp'});

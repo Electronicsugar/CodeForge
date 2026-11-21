@@ -15,10 +15,11 @@ import {saveBehaviourWindows,flushBehaviour} from '../services/behaviourStorage'
 import './CollaborativeBattleEditor.css';
 
 globalThis.MonacoEnvironment={getWorker:()=>new EditorWorker()};
-export default function CollaborativeBattleEditor({roomId,teamId,problemId,userId,language='cpp',verified=true,readOnly,onChange,onProvider}){
+export default function CollaborativeBattleEditor({roomId,teamId,problemId,userId,language='cpp',verified=true,readOnly,onChange,onProvider,onLocalEdit,battleEnd}){
   const container=useRef(null),editor=useRef(null),change=useRef(onChange),providerChanged=useRef(onProvider),locked=useRef(readOnly);
   locked.current=readOnly;
   change.current=onChange;providerChanged.current=onProvider;
+  const localEdit=useRef(onLocalEdit);localEdit.current=onLocalEdit;
   const liveProvider=useRef(null);
   const [status,setStatus]=useState('Connecting…'),[peers,setPeers]=useState([]),[previousBackup,setPreviousBackup]=useState(null),[analyticsStatus,setAnalyticsStatus]=useState('Analytics ready');
   useEffect(()=>{
@@ -43,7 +44,8 @@ export default function CollaborativeBattleEditor({roomId,teamId,problemId,userI
         const withinBattle=()=>!provider.endTime||Date.now()+(provider.serverOffset||0)<=+new Date(provider.endTime);
         keyListener=editor.current.onKeyDown(event=>collector.key(event.browserEvent));
         pasteNode=editor.current.getDomNode();const paste=event=>{if(event.isTrusted&&withinBattle())collector.paste();};pasteNode.addEventListener('paste',paste,true);
-        editListener=model.onDidChangeContent(event=>{if(provider.canWrite&&withinBattle())collector.change(event,{remote:provider.applyingRemote,programmatic:event.isFlush});});
+        let previousLength=model.getValueLength();
+        editListener=model.onDidChangeContent(event=>{const length=model.getValueLength();if(provider.canWrite&&withinBattle()){if(!provider.applyingRemote&&!event.isFlush&&!event.isUndoing&&!event.isRedoing)localEdit.current?.(previousLength,length);collector.change(event,{remote:provider.applyingRemote,programmatic:event.isFlush});}previousLength=length;});
         saveAnalytics=async(upload=true)=>{
           if(withinBattle())collector.tick({visible:document.visibilityState==='visible'&&document.hasFocus(),peerCount:provider.awareness.getStates().size});
           const windows=collector.batches();
@@ -62,5 +64,6 @@ export default function CollaborativeBattleEditor({roomId,teamId,problemId,userI
   },[roomId,teamId,problemId,userId,language]);
   useEffect(()=>{const provider=liveProvider.current;editor.current?.updateOptions({readOnly:readOnly||provider?.canWrite===false});if(provider?.canWrite===false&&editor.current){provider.monacoBinding?.destroy();provider.monacoBinding=null;const model=editor.current.getModel();if(model.getValue()!==provider.authoritativeCode)model.setValue(provider.authoritativeCode||'');if(provider.unmergedLocalBackup)setPreviousBackup(provider.unmergedLocalBackup);}},[readOnly,status]);
   useEffect(()=>{const provider=liveProvider.current;if(verified&&provider?.socket.connected&&!provider.connected)provider.join();},[verified]);
+  useEffect(()=>{if(liveProvider.current&&battleEnd)liveProvider.current.endTime=battleEnd;},[battleEnd]);
   return <div className="collaboration-editor"><div className="collaboration-status" role="status">{status}<span>{peers.length?peers.map(peer=>peer.name).join(', '):'No other connected teammates'}</span><button className="room-button" onClick={()=>liveProvider.current?.join()}>Reconnect shared editor</button></div><p className="collaboration-phase-note">Battle analytics records aggregate editing timing, paste-event counts and approximate contribution. Clipboard contents and raw keys are never recorded. Your profile is private; these metrics do not produce cheating verdicts or penalties. Metrics expire after 30 days.</p><p className="collaboration-phase-note" role="status">{analyticsStatus}</p>{previousBackup!==null&&<button className="room-button" onClick={()=>{const url=URL.createObjectURL(new Blob([previousBackup],{type:'text/plain'}));const link=document.createElement('a');link.href=url;link.download=`codeforge-unsynchronized-backup.${({cpp:'cpp',python:'py',javascript:'js',java:'java'})[language]}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>Download previous local backup</button>}<div className="collaboration-monaco" ref={container}/></div>;
 }
