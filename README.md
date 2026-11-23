@@ -536,18 +536,3 @@ Render's free tier automatically spins down web services after 15 minutes of ina
 
 ---
 
-## 👨‍💻 Author
-
-**Love Jindal**
-- GitHub: [@Lovejindal1](https://github.com/Lovejindal1)
-- Live Project: [code-forge-iota-ten.vercel.app](https://code-forge-iota-ten.vercel.app)
-
----
-
-<div align="center">
-
-⭐ **If you like this project, please give it a star!**
-
-Made with ❤️ by [Love Jindal](https://github.com/Lovejindal1)
-
-</div>
